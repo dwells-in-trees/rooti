@@ -1,0 +1,31 @@
+import "..\fonts\JetBrainsMonoNL-Regular.ttf";
+
+export struct SegmentData {
+    start_x: float,
+    start_y: float,
+    end_x: float,
+    end_y: float,
+}
+
+export component AppWindow inherits Window {
+    no-frame: true;
+    background: transparent;
+
+    in property <[SegmentData]> segments;
+
+    for segment in segments : Path {
+        stroke: white;
+        stroke-width: 2px;
+        MoveTo {
+            x: segment.start_x;
+            y: segment.start_y;
+        }
+        LineTo {
+            x: segment.end_x;
+            y: segment.end_y;
+        }
+        Close {
+
+        }
+    }
+}   
