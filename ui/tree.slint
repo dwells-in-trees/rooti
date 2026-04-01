@@ -12,8 +12,26 @@ export component AppWindow inherits Window {
     background: transparent;
 
     in property <[SegmentData]> segments;
-
     for segment in segments : Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        stroke: white;
+        stroke-width: 2px;
+        MoveTo {
+            x: segment.start-x;
+            y: segment.start-y;
+        }
+        LineTo {
+            x: segment.end-x;
+            y: segment.end-y;
+        }
+    }
+
+    /* for segment in segments : Path {
         stroke: white;
         stroke-width: 2px;
         MoveTo {
@@ -27,5 +45,5 @@ export component AppWindow inherits Window {
         Close {
 
         }
-    }
+    } */
 }   
