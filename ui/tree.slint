@@ -5,6 +5,7 @@ export struct SegmentData {
     start_y: float,
     end_x: float,
     end_y: float,
+    thickness: float,
 }
 
 export component AppWindow inherits Window {
@@ -20,7 +21,7 @@ export component AppWindow inherits Window {
         viewbox-width: root.width / 1px;
         viewbox-height: root.height / 1px;
         stroke: white;
-        stroke-width: 2px;
+        stroke-width: segment.thickness * 1px;
         MoveTo {
             x: segment.start-x;
             y: segment.start-y;
@@ -30,20 +31,4 @@ export component AppWindow inherits Window {
             y: segment.end-y;
         }
     }
-
-    /* for segment in segments : Path {
-        stroke: white;
-        stroke-width: 2px;
-        MoveTo {
-            x: segment.start_x;
-            y: segment.start_y;
-        }
-        LineTo {
-            x: segment.end_x;
-            y: segment.end_y;
-        }
-        Close {
-
-        }
-    } */
 }   

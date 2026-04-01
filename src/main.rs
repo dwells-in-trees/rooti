@@ -3,7 +3,7 @@ use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
 use std::error::Error;
 
-const BRANCH_THRESHOLD: i32 = 50;
+const BRANCH_THRESHOLD: i32 = 120;
 const BRANCH_ELEVATION: f32 = 30.0;
 
 struct Tree {
@@ -14,6 +14,7 @@ struct TreeNode {
     parent: Option<usize>,
     children: Vec<usize>,
     length: i32,
+    thickness: f32,
     elevation: f32,
     azimuth: f32,
     is_active: bool,
@@ -22,7 +23,7 @@ struct TreeNode {
 
 impl TreeNode {
     fn new(parent: Option<usize>, elevation: f32, azimuth: f32, length: i32, is_active: bool, next_bud_left: bool) -> Self {
-        Self { parent, children: Vec::new(), length, elevation, azimuth, is_active, next_bud_left }
+        Self { parent, children: Vec::new(), length, thickness: 1.0, elevation, azimuth, is_active, next_bud_left }
     }
 }
 
@@ -47,7 +48,7 @@ impl Tree {
                         elevation: node.elevation + rand::random_range(-5.0..=5.0),
                         azimuth: node.azimuth,
                         is_active: true,
-                        next_bud_left: node.next_bud_left,
+                        next_bud_left: !node.next_bud_left,
                     });
                     // branch segment
                     events.push(TreeEvent::Branch {
@@ -55,7 +56,7 @@ impl Tree {
                         elevation: node.elevation + offset + rand::random_range(-5.0..=5.0),
                         azimuth: node.azimuth,
                         is_active: true,
-                        next_bud_left: !node.next_bud_left,
+                        next_bud_left: node.next_bud_left,
                     });
                     // deactivate the parent node
                     events.push(TreeEvent::Deactivate(index));
@@ -73,15 +74,18 @@ impl Tree {
             match event {
                 TreeEvent::Grow(index) => {
                     self.nodes[*index].length += 1;
+                    if self.nodes[*index].is_active {
+                        self.nodes[*index].thickness += 0.01;
+                    }
+                    else {
+                        self.nodes[*index].thickness += 0.02;
+                    }
                 }
                 TreeEvent::Branch { parent, elevation, azimuth, is_active, next_bud_left } => {
                     self.add_node(*parent, *elevation, *azimuth, 1, *is_active, *next_bud_left);
                 }
                 TreeEvent::Deactivate(index) => {
                     self.nodes[*index].is_active = false;
-                }
-                TreeEvent::ToggleBudSide(index) => {
-                    self.nodes[*index].next_bud_left = !self.nodes[*index].next_bud_left;
                 }
             }
         }
@@ -97,13 +101,13 @@ impl Tree {
 enum TreeEvent {
     Grow(usize),
     Branch { parent: usize, elevation: f32, azimuth: f32, is_active: bool, next_bud_left: bool },
-    Deactivate(usize),
-    ToggleBudSide(usize),
+    Deactivate(usize)
 }
 
 struct Segment {
     start: (f32, f32),
     end: (f32, f32),
+    thickness: f32,
 }
 
 impl From<&Segment> for SegmentData {
@@ -113,6 +117,7 @@ impl From<&Segment> for SegmentData {
             start_y: s.start.1 as f32,
             end_x: s.end.0 as f32,
             end_y: s.end.1 as f32,
+            thickness: s.thickness,
         }
     }
 }
@@ -128,7 +133,8 @@ fn nodes_to_segments(tree: &Tree, node_index: usize, pos: (f32, f32), cells: &mu
     let node = &tree.nodes[node_index];
     let elevation_rad = node.elevation.to_radians();
     let end = (pos.0 + (node.length as f32 * elevation_rad.cos()), pos.1 - (node.length as f32 * elevation_rad.sin()));
-    cells.push(Segment { start: pos, end });
+    let thickness = node.thickness;
+    cells.push(Segment { start: pos, end, thickness });
 
     for child in &node.children {
         nodes_to_segments(tree, *child, end, cells);
@@ -153,7 +159,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let scale = primary.scale_factor;
 
     let root_x = (width as f32 / scale) / 5.0;
-    let root_y: f32 = height as f32 / scale;
+    let root_y: f32 = (height as f32 *0.95) as f32 / scale;
     let origin = (root_x as f32, root_y as f32);
 
     // Invoke a function from the event loop to maximize the window and disable cursor hittesting
@@ -169,7 +175,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut tree = Tree::new(); 
 
      // Start the timer to update the glyph text every second with a random character
-    timer.start(TimerMode::Repeated, std::time::Duration::from_millis(100), move || {
+    timer.start(TimerMode::Repeated, std::time::Duration::from_millis(50), move || {
         let app = weak_for_timer.unwrap();
         let _events = tree.tick();
         app.set_segments(tree_to_model(&tree, origin));
