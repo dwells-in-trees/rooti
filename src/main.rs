@@ -10,9 +10,11 @@ const GROWTH_RATE_LENGTH: f32 = 1.0;
 const GROWTH_RATE_THICKNESS_ACTIVE: f32 = 0.03;
 const GROWTH_RATE_THICKNESS_INACTIVE: f32 = 0.01;
 const AUXIN_PRODUCTION: f32 = 1.0;
-const AUXIN_THRESHOLD: f32 = 2.0;
+const AUXIN_THRESHOLD: f32 = 0.5;
 const AUXIN_CONSUMPTION_RATE: f32 = AUXIN_THRESHOLD;
 const MIN_ACTIVATION_AGE: u32 = 100;
+const GRAVITROPISM_THRESHOLD: f32 = 80.0; // degrees from 90° before correction kicks in
+const GRAVITROPISM_RATE: f32 = 0.1;
 
 struct Tree {
     nodes: Vec<TreeNode>,
@@ -114,6 +116,20 @@ impl Tree {
                     if self.nodes[*index].is_active  && self.nodes[*index].children.is_empty() {
                         self.nodes[*index].thickness += GROWTH_RATE_THICKNESS_ACTIVE;
                         self.nodes[*index].length += GROWTH_RATE_LENGTH;
+                    
+                        // Gravitropic correction
+                        let deviation = self.nodes[*index].elevation - 90.0;
+                        if deviation.abs() > GRAVITROPISM_THRESHOLD {
+                            let excess = deviation.abs() - GRAVITROPISM_THRESHOLD;
+                            let max_excess = 90.0 - GRAVITROPISM_THRESHOLD; // how far past threshold is possible
+                            let strength = excess / max_excess; // 0.0 at threshold, 1.0 at horizontal
+                            let correction = GRAVITROPISM_RATE * strength;
+                            if deviation > 0.0 {
+                                self.nodes[*index].elevation -= correction;
+                            } else {
+                                self.nodes[*index].elevation += correction;
+                            }
+                        }
                     }
                     else {
                         self.nodes[*index].thickness += GROWTH_RATE_THICKNESS_INACTIVE;
