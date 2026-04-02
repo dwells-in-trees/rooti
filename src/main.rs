@@ -3,8 +3,16 @@ use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
 use std::error::Error;
 
-const BRANCH_THRESHOLD: i32 = 120;
-const BRANCH_ELEVATION: f32 = 30.0;
+const BRANCH_THRESHOLD: f32 = 100.0;
+const BRANCH_ELEVATION: f32 = 48.0;
+const BRANCH_RANDOM_VARIATION: f32 = 12.0;
+const GROWTH_RATE_LENGTH: f32 = 1.0;
+const GROWTH_RATE_THICKNESS_ACTIVE: f32 = 0.03;
+const GROWTH_RATE_THICKNESS_INACTIVE: f32 = 0.01;
+const AUXIN_PRODUCTION: f32 = 1.0;
+const AUXIN_THRESHOLD: f32 = 2.0;
+const AUXIN_CONSUMPTION_RATE: f32 = AUXIN_THRESHOLD;
+const MIN_ACTIVATION_AGE: u32 = 100;
 
 struct Tree {
     nodes: Vec<TreeNode>,
@@ -13,55 +21,59 @@ struct Tree {
 struct TreeNode {
     parent: Option<usize>,
     children: Vec<usize>,
-    length: i32,
+    length: f32,
     thickness: f32,
     elevation: f32,
     azimuth: f32,
     is_active: bool,
     next_bud_left: bool,
+    auxin_received: f32,
+    age: u32,
 }
 
 impl TreeNode {
-    fn new(parent: Option<usize>, elevation: f32, azimuth: f32, length: i32, is_active: bool, next_bud_left: bool) -> Self {
-        Self { parent, children: Vec::new(), length, thickness: 1.0, elevation, azimuth, is_active, next_bud_left }
+    fn new(parent: Option<usize>, elevation: f32, azimuth: f32, length: f32, is_active: bool, next_bud_left: bool) -> Self {
+        Self { parent, children: Vec::new(), length, thickness: 1.0, elevation, azimuth, is_active, next_bud_left, auxin_received: 0.0, age: 0 }
     }
 }
 
 
 impl Tree {
     fn new() -> Self {
-        Self { nodes: vec![TreeNode::new(None, 90.0, 200.0, 1, true, false)] }
+        Self { nodes: vec![TreeNode::new(None, 90.0, 200.0, 1.0, true, false)] }
     }
+
 
     fn tick(&mut self) -> Vec<TreeEvent> {
         let mut events = Vec::new();
+        
+        self.update_auxin();
 
+        // iterate through all nodes and generate growth events
         for (index, node) in self.nodes.iter().enumerate() {
-            if node.is_active {
-                events.push(TreeEvent::Grow(index));
-
+            events.push(TreeEvent::Grow(index));
+            if node.is_active && node.length >= BRANCH_THRESHOLD && node.children.is_empty() {
+                // continue current limb
                 let offset = if node.next_bud_left { -BRANCH_ELEVATION } else { BRANCH_ELEVATION };
-                if node.length >= BRANCH_THRESHOLD {
-                    // continutation segment
-                    events.push(TreeEvent::Branch {
-                        parent: index,
-                        elevation: node.elevation + rand::random_range(-5.0..=5.0),
-                        azimuth: node.azimuth,
-                        is_active: true,
-                        next_bud_left: !node.next_bud_left,
-                    });
-                    // branch segment
-                    events.push(TreeEvent::Branch {
-                        parent: index,
-                        elevation: node.elevation + offset + rand::random_range(-5.0..=5.0),
-                        azimuth: node.azimuth,
-                        is_active: true,
-                        next_bud_left: node.next_bud_left,
-                    });
-                    // deactivate the parent node
-                    events.push(TreeEvent::Deactivate(index));
-                }
-
+                events.push(TreeEvent::Branch{ 
+                    parent: index, 
+                    elevation: node.elevation + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION), 
+                    azimuth: node.azimuth,
+                    is_active: true, 
+                    next_bud_left: !node.next_bud_left,
+                });
+                events.push(TreeEvent::Branch {
+                    parent: index, 
+                    elevation: node.elevation + offset + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION), 
+                    azimuth: node.azimuth,
+                    is_active: false, 
+                    next_bud_left: !node.next_bud_left,
+                });
+                events.push(TreeEvent::Deactivate(index))
+            } else if !node.is_active && node.auxin_received <= AUXIN_THRESHOLD && node.age >= MIN_ACTIVATION_AGE {
+                events.push(TreeEvent::Activate(index));
+            } else if node.is_active && node.auxin_received > AUXIN_THRESHOLD {
+                events.push(TreeEvent::Deactivate(index));
             }
         }
 
@@ -69,29 +81,59 @@ impl Tree {
         events
     }
 
+    fn update_auxin(&mut self) {
+        let mut auxin_values = vec![0.0f32; self.nodes.len()];
+        self.compute_auxin(0, &mut auxin_values);
+        for (index, value) in auxin_values.iter().enumerate() {
+            self.nodes[index].auxin_received = *value;
+        }
+    }
+
+    fn compute_auxin(&self, node_index: usize, values: &mut Vec<f32>) -> f32 {
+        let node = &self.nodes[node_index];
+        let children = node.children.clone();
+        
+        let mut received = 0.0;
+        for child in children {
+            received += self.compute_auxin(child, values);
+        }
+        
+        let produced = if node.is_active { AUXIN_PRODUCTION } else { 0.0 };
+        let consumed = AUXIN_CONSUMPTION_RATE;
+        let surplus = (produced + received - consumed).max(0.0);
+        
+        values[node_index] = received;
+        surplus
+    }
+
     fn apply_events(&mut self, events: &[TreeEvent]) {
         for event in events {
             match event {
                 TreeEvent::Grow(index) => {
-                    self.nodes[*index].length += 1;
-                    if self.nodes[*index].is_active {
-                        self.nodes[*index].thickness += 0.01;
+                    self.nodes[*index].age += 1;
+                    if self.nodes[*index].is_active  && self.nodes[*index].children.is_empty() {
+                        self.nodes[*index].thickness += GROWTH_RATE_THICKNESS_ACTIVE;
+                        self.nodes[*index].length += GROWTH_RATE_LENGTH;
                     }
                     else {
-                        self.nodes[*index].thickness += 0.02;
+                        self.nodes[*index].thickness += GROWTH_RATE_THICKNESS_INACTIVE;
                     }
                 }
                 TreeEvent::Branch { parent, elevation, azimuth, is_active, next_bud_left } => {
-                    self.add_node(*parent, *elevation, *azimuth, 1, *is_active, *next_bud_left);
+                    self.add_node(*parent, *elevation, *azimuth, 1.0, *is_active, *next_bud_left);
+                }
+                TreeEvent::Activate(index) => {
+                    self.nodes[*index].is_active = true;
                 }
                 TreeEvent::Deactivate(index) => {
                     self.nodes[*index].is_active = false;
                 }
+
             }
         }
     }
 
-    fn add_node(&mut self, parent_index: usize, elevation: f32, azimuth: f32, length: i32, is_active: bool, next_bud_left: bool) {
+    fn add_node(&mut self, parent_index: usize, elevation: f32, azimuth: f32, length: f32, is_active: bool, next_bud_left: bool) {
         let new_node_index = self.nodes.len();
         self.nodes.push(TreeNode::new(Some(parent_index), elevation, azimuth, length, is_active, next_bud_left));
         self.nodes[parent_index].children.push(new_node_index);
@@ -101,23 +143,26 @@ impl Tree {
 enum TreeEvent {
     Grow(usize),
     Branch { parent: usize, elevation: f32, azimuth: f32, is_active: bool, next_bud_left: bool },
-    Deactivate(usize)
+    Deactivate(usize),
+    Activate(usize),
 }
 
 struct Segment {
-    start: (f32, f32),
-    end: (f32, f32),
-    thickness: f32,
+    x1: f32, y1: f32,
+    x2: f32, y2: f32,
+    x3: f32, y3: f32,
+    x4: f32, y4: f32,
+    radius: f32,
 }
 
 impl From<&Segment> for SegmentData {
     fn from(s: &Segment) -> Self {
         SegmentData {
-            start_x: s.start.0 as f32,
-            start_y: s.start.1 as f32,
-            end_x: s.end.0 as f32,
-            end_y: s.end.1 as f32,
-            thickness: s.thickness,
+            x1: s.x1, y1: s.y1,
+            x2: s.x2, y2: s.y2,
+            x3: s.x3, y3: s.y3,
+            x4: s.x4, y4: s.y4,
+            radius: s.radius,
         }
     }
 }
@@ -134,10 +179,32 @@ fn nodes_to_segments(tree: &Tree, node_index: usize, pos: (f32, f32), cells: &mu
     let elevation_rad = node.elevation.to_radians();
     let end = (pos.0 + (node.length as f32 * elevation_rad.cos()), pos.1 - (node.length as f32 * elevation_rad.sin()));
     let thickness = node.thickness;
-    cells.push(Segment { start: pos, end, thickness });
+    let dx = end.0 - pos.0;
+    let dy = end.1 - pos.1;
+    let len = (dx*dx + dy*dy).sqrt();
+    // perpendicular unit vector
+    let px = -dy / len * (thickness / 2.0);
+    let py = dx / len * (thickness / 2.0);
+    // compute the 4 corners of the segment rectangle and push to segments
+    cells.push(Segment {
+        x1: pos.0 + px, y1: pos.1 + py,
+        x2: pos.0 - px, y2: pos.1 - py,
+        x3: end.0 - px,   y3: end.1 - py,
+        x4: end.0 + px,    y4: end.1 + py,
+        radius: thickness / 2.0,
+    });
+
+    let parent_thickness = tree.nodes[node_index].thickness;
 
     for child in &node.children {
-        nodes_to_segments(tree, *child, end, cells);
+        let child_node = &tree.nodes[*child];
+        let child_elevation_rad = child_node.elevation.to_radians();
+        let overlap = parent_thickness / 2.0;
+        let child_start = (
+            end.0 - overlap * child_elevation_rad.cos(),
+            end.1 + overlap * child_elevation_rad.sin(),
+        );
+        nodes_to_segments(tree, *child, child_start, cells);
     }
 }
 
@@ -158,7 +225,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let height = primary.height;
     let scale = primary.scale_factor;
 
-    let root_x = (width as f32 / scale) / 5.0;
+    let root_x = (width as f32 / scale) / 2.0;
     let root_y: f32 = (height as f32 *0.95) as f32 / scale;
     let origin = (root_x as f32, root_y as f32);
 
