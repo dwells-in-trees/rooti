@@ -1,16 +1,14 @@
 use slint::*;
 use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
-use std::error::Error;
+use std::{error::Error };
 
 const BRANCH_THRESHOLD: f32 = 100.0;
 const BRANCH_ELEVATION: f32 = 48.0;
-const BRANCH_RANDOM_VARIATION: f32 = 12.0;
+const BRANCH_RANDOM_VARIATION: f32 = 6.0;
 const GROWTH_RATE_LENGTH: f32 = 1.0;
-const GROWTH_RATE_THICKNESS_ACTIVE: f32 = 0.03;
-const GROWTH_RATE_THICKNESS_INACTIVE: f32 = 0.01;
-const AUXIN_PRODUCTION: f32 = 1.0;
-const AUXIN_THRESHOLD: f32 = 0.5;
+const AUXIN_PRODUCTION: f32 = 5.0;
+const AUXIN_THRESHOLD: f32 = 1.0;
 const AUXIN_CONSUMPTION_RATE: f32 = AUXIN_THRESHOLD;
 const MIN_ACTIVATION_AGE: u32 = 100;
 const GRAVITROPISM_THRESHOLD: f32 = 80.0; // degrees from 90° before correction kicks in
@@ -50,6 +48,7 @@ impl Tree {
         let mut events = Vec::new();
         
         self.update_auxin();
+        self.update_pipes();
 
         // iterate through all nodes and generate growth events
         for (index, node) in self.nodes.iter().enumerate() {
@@ -108,13 +107,38 @@ impl Tree {
         surplus
     }
 
+    fn update_pipes(&mut self) {
+        let mut pipe_values = vec![0.0f32; self.nodes.len()];
+        self.compute_pipes(0, &mut pipe_values);
+        for (index, value) in pipe_values.iter().enumerate() {
+            self.nodes[index].thickness = value.max(self.nodes[index].thickness);
+            if self.nodes[index].thickness > self.nodes[index].thickness {println!("Node: {} Current Thickness: {}, New Thickness {}", index, self.nodes[index].thickness, value);}
+        }
+    }
+
+    fn compute_pipes(&mut self, node_index: usize, values: &mut Vec<f32>) -> f32 {
+        let node = &self.nodes[node_index];
+        let children = node.children.clone();
+
+        let mut sum_pipes = 0.0;
+        if children.is_empty() {
+            sum_pipes = 1.0; // leaf node contributes 1 pipe
+        } else {
+            for child in children {
+                sum_pipes += self.compute_pipes(child, values).powf(2.0);
+                sum_pipes = sum_pipes.sqrt();
+            }
+        }
+        values[node_index] = sum_pipes;
+        sum_pipes
+    }
+
     fn apply_events(&mut self, events: &[TreeEvent]) {
         for event in events {
             match event {
                 TreeEvent::Grow(index) => {
                     self.nodes[*index].age += 1;
                     if self.nodes[*index].is_active  && self.nodes[*index].children.is_empty() {
-                        self.nodes[*index].thickness += GROWTH_RATE_THICKNESS_ACTIVE;
                         self.nodes[*index].length += GROWTH_RATE_LENGTH;
                     
                         // Gravitropic correction
@@ -130,9 +154,6 @@ impl Tree {
                                 self.nodes[*index].elevation += correction;
                             }
                         }
-                    }
-                    else {
-                        self.nodes[*index].thickness += GROWTH_RATE_THICKNESS_INACTIVE;
                     }
                 }
                 TreeEvent::Branch { parent, elevation, azimuth, is_active, next_bud_left } => {
