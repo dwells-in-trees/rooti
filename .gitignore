@@ -1,1 +1,8 @@
+# Build artifacts
 /target
+
+# IDE files
+desktop-tree.code-workspace
+
+# Backups
+*.bak
