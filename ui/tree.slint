@@ -4,6 +4,7 @@ export struct SegmentData {
     x3: float, y3: float,
     x4: float, y4: float,
     radius: float,
+    sweep: bool,
 }
 
 export component AppWindow inherits Window {
@@ -19,8 +20,9 @@ export component AppWindow inherits Window {
         viewbox-width: root.width / 1px;
         viewbox-height: root.height / 1px;
         fill: white;
-        stroke-line-cap: round;
-        stroke-line-join: round;
+        //fill-rule: evenodd;
+        stroke: white;
+        stroke-width: 1px;
         MoveTo {
             x: segment.x1;
             y: segment.y1;
@@ -34,11 +36,11 @@ export component AppWindow inherits Window {
             y: segment.y3;
         }
         ArcTo {
-        x: segment.x4;
-        y: segment.y4;
-        radius-x: segment.radius;
-        radius-y: segment.radius;
-        sweep: true;
+            x: segment.x4;
+            y: segment.y4;
+            radius-x: segment.radius;
+            radius-y: segment.radius;
+            sweep: segment.sweep;
         }
         Close{}
     }

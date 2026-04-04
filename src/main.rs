@@ -8,7 +8,7 @@ const BRANCH_ELEVATION: f32 = 48.0;
 const BRANCH_RANDOM_VARIATION: f32 = 6.0;
 const GROWTH_RATE_LENGTH: f32 = 1.0;
 const AUXIN_PRODUCTION: f32 = 5.0;
-const AUXIN_THRESHOLD: f32 = 1.0;
+const AUXIN_THRESHOLD: f32 = 0.1;
 const AUXIN_CONSUMPTION_RATE: f32 = AUXIN_THRESHOLD;
 const MIN_ACTIVATION_AGE: u32 = 100;
 const GRAVITROPISM_THRESHOLD: f32 = 80.0; // degrees from 90° before correction kicks in
@@ -34,6 +34,7 @@ struct TreeNode {
 impl TreeNode {
     fn new(parent: Option<usize>, elevation: f32, azimuth: f32, length: f32, is_active: bool, next_bud_left: bool) -> Self {
         Self { parent, children: Vec::new(), length, thickness: 1.0, elevation, azimuth, is_active, next_bud_left, auxin_received: 0.0, age: 0 }
+
     }
 }
 
@@ -112,7 +113,11 @@ impl Tree {
         self.compute_pipes(0, &mut pipe_values);
         for (index, value) in pipe_values.iter().enumerate() {
             self.nodes[index].thickness = value.max(self.nodes[index].thickness);
-            if self.nodes[index].thickness > self.nodes[index].thickness {println!("Node: {} Current Thickness: {}, New Thickness {}", index, self.nodes[index].thickness, value);}
+        }
+        for (i, node) in self.nodes.iter().enumerate() {
+            if node.children.is_empty() && node.thickness > 1.0 {
+                println!("WARNING: leaf node {} has thickness {}", i, node.thickness);
+            }
         }
     }
 
@@ -190,6 +195,7 @@ struct Segment {
     x3: f32, y3: f32,
     x4: f32, y4: f32,
     radius: f32,
+    sweep: bool,
 }
 
 impl From<&Segment> for SegmentData {
@@ -200,6 +206,7 @@ impl From<&Segment> for SegmentData {
             x3: s.x3, y3: s.y3,
             x4: s.x4, y4: s.y4,
             radius: s.radius,
+            sweep: s.sweep,
         }
     }
 }
@@ -211,25 +218,54 @@ fn tree_to_model(tree: &Tree, origin: (f32, f32)) -> ModelRc<SegmentData> {
     ModelRc::new(VecModel::from(slint_segments))
 }
 
+/// Recursively converts tree nodes to segments for rendering. 
+/// 
+/// Each node is represented as a rectangle (segment) with thickness based on the number of pipes. The function calculates the end position of each segment based on the node's length and elevation, and then computes the corners of the rectangle to create a visually appealing branch. 
+/// It also applies an overlap for child segments to ensure they connect smoothly to their parent segments.
 fn nodes_to_segments(tree: &Tree, node_index: usize, pos: (f32, f32), cells: &mut Vec<Segment>) {
     let node = &tree.nodes[node_index];
+    let thickness = node.thickness*5.0; // scale thickness for better visibility
     let elevation_rad = node.elevation.to_radians();
+
+    // calculate end position of the segment based on length and elevation
     let end = (pos.0 + (node.length as f32 * elevation_rad.cos()), pos.1 - (node.length as f32 * elevation_rad.sin()));
-    let thickness = node.thickness;
     let dx = end.0 - pos.0;
     let dy = end.1 - pos.1;
     let len = (dx*dx + dy*dy).sqrt();
     // perpendicular unit vector
     let px = -dy / len * (thickness / 2.0);
     let py = dx / len * (thickness / 2.0);
-    // compute the 4 corners of the segment rectangle and push to segments
-    cells.push(Segment {
-        x1: pos.0 + px, y1: pos.1 + py,
-        x2: pos.0 - px, y2: pos.1 - py,
-        x3: end.0 - px,   y3: end.1 - py,
-        x4: end.0 + px,    y4: end.1 + py,
-        radius: thickness / 2.0,
-    });
+
+    // compute corners of the rectangle representing the branch segment
+    let (c1, c2, c3, c4) = if node.elevation > 90.0 {
+        ((pos.0 - px, pos.1 - py), (pos.0 + px, pos.1 + py),
+        (end.0 + px, end.1 + py), (end.0 - px, end.1 - py))
+    } else {
+        ((pos.0 + px, pos.1 + py), (pos.0 - px, pos.1 - py),
+        (end.0 - px, end.1 - py), (end.0 + px, end.1 + py))
+    };
+
+    let cross = (c2.0 - c1.0) * (c3.1 - c2.1) - (c2.1 - c1.1) * (c3.0 - c2.0);
+    if cross > 0.0 {
+        // swap to reverse winding
+        cells.push(Segment {
+            x1: pos.0 - px, y1: pos.1 - py,
+            x2: pos.0 + px, y2: pos.1 + py,
+            x3: end.0 + px, y3: end.1 + py,
+            x4: end.0 - px, y4: end.1 - py,
+            radius: thickness / 2.0,
+            sweep: false,
+        });
+    } else {
+        cells.push(Segment {
+            x1: pos.0 + px, y1: pos.1 + py,
+            x2: pos.0 - px, y2: pos.1 - py,
+            x3: end.0 - px, y3: end.1 - py,
+            x4: end.0 + px, y4: end.1 + py,
+            radius: thickness / 2.0,
+            sweep: true,
+        });
+    }
 
     let parent_thickness = tree.nodes[node_index].thickness;
 
