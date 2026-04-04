@@ -3,16 +3,18 @@ use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
 use std::{error::Error };
 
-const BRANCH_THRESHOLD: f32 = 100.0;
-const BRANCH_ELEVATION: f32 = 48.0;
-const BRANCH_RANDOM_VARIATION: f32 = 6.0;
+const CLOCK_INTERVAL_MS: u64 = 5;
+const BRANCH_THRESHOLD: f32 = 75.0;
+const BRANCH_ELEVATION: f32 = 30.0;
+const BRANCH_RANDOM_VARIATION: f32 = 12.0;
 const GROWTH_RATE_LENGTH: f32 = 1.0;
-const AUXIN_PRODUCTION: f32 = 5.0;
+const AUXIN_PRODUCTION: f32 = 1.0;
 const AUXIN_THRESHOLD: f32 = 0.1;
-const AUXIN_CONSUMPTION_RATE: f32 = AUXIN_THRESHOLD;
+const AUXIN_CONSUMPTION_RATE: f32 = 0.05;
 const MIN_ACTIVATION_AGE: u32 = 100;
 const GRAVITROPISM_THRESHOLD: f32 = 80.0; // degrees from 90° before correction kicks in
 const GRAVITROPISM_RATE: f32 = 0.1;
+const NODE_ACTIVITY_PROBABILITY: f32 = 0.30;
 
 struct Tree {
     nodes: Vec<TreeNode>,
@@ -34,7 +36,6 @@ struct TreeNode {
 impl TreeNode {
     fn new(parent: Option<usize>, elevation: f32, azimuth: f32, length: f32, is_active: bool, next_bud_left: bool) -> Self {
         Self { parent, children: Vec::new(), length, thickness: 1.0, elevation, azimuth, is_active, next_bud_left, auxin_received: 0.0, age: 0 }
-
     }
 }
 
@@ -72,8 +73,12 @@ impl Tree {
                     next_bud_left: !node.next_bud_left,
                 });
                 events.push(TreeEvent::Deactivate(index))
-            } else if !node.is_active && node.auxin_received <= AUXIN_THRESHOLD && node.age >= MIN_ACTIVATION_AGE {
-                events.push(TreeEvent::Activate(index));
+            } else if !node.is_active && node.age >= MIN_ACTIVATION_AGE {
+                if let Some(parent_idx) = node.parent {
+                    if self.nodes[parent_idx].auxin_received <= AUXIN_THRESHOLD {
+                        events.push(TreeEvent::Activate(index));
+                    }
+                }
             } else if node.is_active && node.auxin_received > AUXIN_THRESHOLD {
                 events.push(TreeEvent::Deactivate(index));
             }
@@ -101,7 +106,7 @@ impl Tree {
         }
         
         let produced = if node.is_active { AUXIN_PRODUCTION } else { 0.0 };
-        let consumed = AUXIN_CONSUMPTION_RATE;
+        let consumed = node.length * node.thickness * AUXIN_CONSUMPTION_RATE;
         let surplus = (produced + received - consumed).max(0.0);
         
         values[node_index] = received;
@@ -144,19 +149,21 @@ impl Tree {
                 TreeEvent::Grow(index) => {
                     self.nodes[*index].age += 1;
                     if self.nodes[*index].is_active  && self.nodes[*index].children.is_empty() {
-                        self.nodes[*index].length += GROWTH_RATE_LENGTH;
-                    
-                        // Gravitropic correction
-                        let deviation = self.nodes[*index].elevation - 90.0;
-                        if deviation.abs() > GRAVITROPISM_THRESHOLD {
-                            let excess = deviation.abs() - GRAVITROPISM_THRESHOLD;
-                            let max_excess = 90.0 - GRAVITROPISM_THRESHOLD; // how far past threshold is possible
-                            let strength = excess / max_excess; // 0.0 at threshold, 1.0 at horizontal
-                            let correction = GRAVITROPISM_RATE * strength;
-                            if deviation > 0.0 {
-                                self.nodes[*index].elevation -= correction;
-                            } else {
-                                self.nodes[*index].elevation += correction;
+                        if rand::random_range(0.0..1.0) < NODE_ACTIVITY_PROBABILITY {
+                            self.nodes[*index].length += GROWTH_RATE_LENGTH;
+                        
+                            // Gravitropic correction
+                            let deviation = self.nodes[*index].elevation - 90.0;
+                            if deviation.abs() > GRAVITROPISM_THRESHOLD {
+                                let excess = deviation.abs() - GRAVITROPISM_THRESHOLD;
+                                let max_excess = 90.0 - GRAVITROPISM_THRESHOLD; // how far past threshold is possible
+                                let strength = excess / max_excess; // 0.0 at threshold, 1.0 at horizontal
+                                let correction = GRAVITROPISM_RATE * strength;
+                                if deviation > 0.0 {
+                                    self.nodes[*index].elevation -= correction;
+                                } else {
+                                    self.nodes[*index].elevation += correction;
+                                }
                             }
                         }
                     }
@@ -315,7 +322,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut tree = Tree::new(); 
 
      // Start the timer to update the glyph text every second with a random character
-    timer.start(TimerMode::Repeated, std::time::Duration::from_millis(50), move || {
+    timer.start(TimerMode::Repeated, std::time::Duration::from_millis(CLOCK_INTERVAL_MS), move || {
         let app = weak_for_timer.unwrap();
         let _events = tree.tick();
         app.set_segments(tree_to_model(&tree, origin));
