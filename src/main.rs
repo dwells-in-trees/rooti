@@ -3,23 +3,45 @@ use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
 use std::{error::Error };
 
-// Consistent simulation parameters
-const CLOCK_INTERVAL_MS: u64 = 5;
-const NODE_ACTIVITY_PROBABILITY: f32 = 0.30;
 
-// Tree specific parameters
-const BRANCH_THRESHOLD: f32 = 50.0;
-const BRANCH_ELEVATION: f32 = 40.0;
-const BRANCH_THICKNESS_FACTOR: f32 = 1.0;
-const BRANCH_RANDOM_VARIATION: f32 = 15.0;
-const GROWTH_RATE_LENGTH: f32 = 1.0;
-const AUXIN_PRODUCTION: f32 = 10.0;
-const AUXIN_THRESHOLD: f32 = 0.1;
-const AUXIN_CONSUMPTION_RATE: f32 = 0.05;
-const MIN_ACTIVATION_AGE: u32 = 100;
-const GRAVITROPISM_THRESHOLD: f32 = 80.0; // degrees from 90° before correction kicks in
-const GRAVITROPISM_RATE: f32 = 0.1;
+struct TreeConfig {
+    // Consistent simulation parameters
+    CLOCK_INTERVAL_MS: u64,
+    NODE_ACTIVITY_PROBABILITY: f32,
 
+    // Tree specific parameters
+    BRANCH_THRESHOLD: f32,
+    BRANCH_ELEVATION: f32,
+    BRANCH_THICKNESS_FACTOR: f32,
+    BRANCH_RANDOM_VARIATION: f32,
+    GROWTH_RATE_LENGTH: f32,
+    AUXIN_PRODUCTION: f32,
+    AUXIN_THRESHOLD: f32,
+    AUXIN_CONSUMPTION_RATE: f32,
+    MIN_ACTIVATION_AGE: u32,
+    GRAVITROPISM_THRESHOLD: f32, // degrees from 90° before correction kicks in
+    GRAVITROPISM_RATE: f32,
+}
+
+impl TreeConfig {
+    fn defualt() -> Self {
+        Self {
+            CLOCK_INTERVAL_MS: 5,
+            NODE_ACTIVITY_PROBABILITY: 0.30,
+            BRANCH_THRESHOLD: 50.0,
+            BRANCH_ELEVATION: 40.0,
+            BRANCH_THICKNESS_FACTOR: 1.0,
+            BRANCH_RANDOM_VARIATION: 15.0,
+            GROWTH_RATE_LENGTH: 1.0,
+            AUXIN_PRODUCTION: 10.0,
+            AUXIN_THRESHOLD: 0.1,
+            AUXIN_CONSUMPTION_RATE: 0.05,
+            MIN_ACTIVATION_AGE: 100,
+            GRAVITROPISM_THRESHOLD: 80.0, // degrees from 90° before correction kicks in
+            GRAVITROPISM_RATE: 0.1,
+        }
+    }
+}
 
 struct Tree {
     nodes: Vec<TreeNode>,
