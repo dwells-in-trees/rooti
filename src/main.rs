@@ -3,18 +3,23 @@ use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
 use std::{error::Error };
 
+// Consistent simulation parameters
 const CLOCK_INTERVAL_MS: u64 = 5;
-const BRANCH_THRESHOLD: f32 = 75.0;
-const BRANCH_ELEVATION: f32 = 30.0;
-const BRANCH_RANDOM_VARIATION: f32 = 12.0;
+const NODE_ACTIVITY_PROBABILITY: f32 = 0.30;
+
+// Tree specific parameters
+const BRANCH_THRESHOLD: f32 = 50.0;
+const BRANCH_ELEVATION: f32 = 40.0;
+const BRANCH_THICKNESS_FACTOR: f32 = 1.0;
+const BRANCH_RANDOM_VARIATION: f32 = 15.0;
 const GROWTH_RATE_LENGTH: f32 = 1.0;
-const AUXIN_PRODUCTION: f32 = 1.0;
+const AUXIN_PRODUCTION: f32 = 10.0;
 const AUXIN_THRESHOLD: f32 = 0.1;
 const AUXIN_CONSUMPTION_RATE: f32 = 0.05;
 const MIN_ACTIVATION_AGE: u32 = 100;
 const GRAVITROPISM_THRESHOLD: f32 = 80.0; // degrees from 90° before correction kicks in
 const GRAVITROPISM_RATE: f32 = 0.1;
-const NODE_ACTIVITY_PROBABILITY: f32 = 0.30;
+
 
 struct Tree {
     nodes: Vec<TreeNode>,
@@ -27,22 +32,66 @@ struct TreeNode {
     thickness: f32,
     elevation: f32,
     azimuth: f32,
-    is_active: bool,
-    next_bud_left: bool,
-    auxin_received: f32,
     age: u32,
+    auxin_received: f32,
+    node_type: NodeType,
+}
+
+#[derive(Clone, Copy)]
+enum NodeType {
+    Wood {
+        is_active: bool,
+        left_node: bool,
+    },
+    Leaf {
+        size: f32,
+    },
+}
+
+impl NodeType {
+    fn is_active_wood(&self) -> bool {
+        matches!(self, NodeType::Wood { is_active: true, .. })
+    }
+
+    fn is_inactive_wood(&self) -> bool {
+        matches!(self, NodeType::Wood { is_active: false, .. })
+    }
+
+    fn left_node(&self) -> bool {
+        matches!(self, NodeType::Wood { left_node: true, .. })
+    }
+
+    fn set_active(&mut self, active: bool) {
+        if let NodeType::Wood { is_active, .. } = self {
+            *is_active = active;
+        }
+    }
+
+    fn is_leaf(&self) -> bool {
+        matches!(self, NodeType::Leaf { .. })
+    }
+
+    fn is_wood(&self) -> bool {
+        matches!(self, NodeType::Wood { .. })
+    }
+}
+
+enum LeafPlacement {
+    AtBranchPoints,
+    AtBranchTips,
+    AlongSegments,
 }
 
 impl TreeNode {
-    fn new(parent: Option<usize>, elevation: f32, azimuth: f32, length: f32, is_active: bool, next_bud_left: bool) -> Self {
-        Self { parent, children: Vec::new(), length, thickness: 1.0, elevation, azimuth, is_active, next_bud_left, auxin_received: 0.0, age: 0 }
+    fn new(parent: Option<usize>, node_type: NodeType, elevation: f32, azimuth: f32, length: f32) -> Self {
+        Self { parent, children: Vec::new(), length, thickness: 0.5, elevation, azimuth, age: 0, node_type, auxin_received: 0.0 }
     }
 }
 
 
 impl Tree {
     fn new() -> Self {
-        Self { nodes: vec![TreeNode::new(None, 90.0, 200.0, 1.0, true, false)] }
+        Self { nodes: vec![TreeNode::new(None, NodeType::Wood { is_active: true, left_node: false }, 90.0, 200.0, 1.0)] }
     }
 
 
@@ -55,35 +104,47 @@ impl Tree {
         // iterate through all nodes and generate growth events
         for (index, node) in self.nodes.iter().enumerate() {
             events.push(TreeEvent::Grow(index));
-            if node.is_active && node.length >= BRANCH_THRESHOLD && node.children.is_empty() {
-                // continue current limb
-                let offset = if node.next_bud_left { -BRANCH_ELEVATION } else { BRANCH_ELEVATION };
-                events.push(TreeEvent::Branch{ 
+            if node.node_type.is_active_wood() && node.length >= BRANCH_THRESHOLD && node.children.is_empty() {
+
+                let offset = if node.node_type.left_node() { -BRANCH_ELEVATION } else { BRANCH_ELEVATION };
+                
+                // Capture the randomized elevation for the continuation segment first
+                let continuation_elevation = node.elevation + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION);
+                let branch_elevation = node.elevation + offset + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION);
+                let leaf_elevation = 2.0 * node.elevation -branch_elevation + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION); // opposite side of the branch
+
+                events.push(TreeEvent::Branch { 
                     parent: index, 
-                    elevation: node.elevation + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION), 
+                    elevation: continuation_elevation, 
                     azimuth: node.azimuth,
-                    is_active: true, 
-                    next_bud_left: !node.next_bud_left,
+                    node_type: NodeType::Wood { is_active: true, left_node: !node.node_type.left_node() },
                 });
                 events.push(TreeEvent::Branch {
                     parent: index, 
-                    elevation: node.elevation + offset + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION), 
+                    elevation: branch_elevation, 
                     azimuth: node.azimuth,
-                    is_active: false, 
-                    next_bud_left: !node.next_bud_left,
+                    node_type: NodeType::Wood { is_active: false, left_node: node.node_type.left_node() },
                 });
-                events.push(TreeEvent::Deactivate(index))
-            } else if !node.is_active && node.age >= MIN_ACTIVATION_AGE {
-                if let Some(parent_idx) = node.parent {
-                    if self.nodes[parent_idx].auxin_received <= AUXIN_THRESHOLD {
-                        events.push(TreeEvent::Activate(index));
+                // Leaf sprouts from the elbow — opposite direction of the auxiliary branch
+                events.push(TreeEvent::Branch { 
+                    parent: index, 
+                    node_type: NodeType::Leaf { size: 12.0 }, 
+                    elevation: leaf_elevation,  // opposite side from auxiliary branch, relative to parent
+                    azimuth: node.azimuth,
+                });
+                events.push(TreeEvent::Deactivate(index));
+            } else if node.node_type.is_inactive_wood() {
+                if node.age >= MIN_ACTIVATION_AGE {
+                    if let Some(parent_idx) = node.parent {
+                        if self.nodes[parent_idx].auxin_received <= AUXIN_THRESHOLD {
+                            events.push(TreeEvent::Activate(index));
+                        }
                     }
                 }
-            } else if node.is_active && node.auxin_received > AUXIN_THRESHOLD {
+            } else if node.node_type.is_active_wood() && node.auxin_received > AUXIN_THRESHOLD {
                 events.push(TreeEvent::Deactivate(index));
             }
         }
-
         self.apply_events(&events);
         events
     }
@@ -105,7 +166,7 @@ impl Tree {
             received += self.compute_auxin(child, values);
         }
         
-        let produced = if node.is_active { AUXIN_PRODUCTION } else { 0.0 };
+        let produced = if node.node_type.is_active_wood() { AUXIN_PRODUCTION } else { 0.0 };
         let consumed = node.length * node.thickness * AUXIN_CONSUMPTION_RATE;
         let surplus = (produced + received - consumed).max(0.0);
         
@@ -119,11 +180,6 @@ impl Tree {
         for (index, value) in pipe_values.iter().enumerate() {
             self.nodes[index].thickness = value.max(self.nodes[index].thickness);
         }
-        for (i, node) in self.nodes.iter().enumerate() {
-            if node.children.is_empty() && node.thickness > 1.0 {
-                println!("WARNING: leaf node {} has thickness {}", i, node.thickness);
-            }
-        }
     }
 
     fn compute_pipes(&mut self, node_index: usize, values: &mut Vec<f32>) -> f32 {
@@ -136,8 +192,8 @@ impl Tree {
         } else {
             for child in children {
                 sum_pipes += self.compute_pipes(child, values).powf(2.0);
-                sum_pipes = sum_pipes.sqrt();
             }
+            sum_pipes = sum_pipes.sqrt();
         }
         values[node_index] = sum_pipes;
         sum_pipes
@@ -148,7 +204,7 @@ impl Tree {
             match event {
                 TreeEvent::Grow(index) => {
                     self.nodes[*index].age += 1;
-                    if self.nodes[*index].is_active  && self.nodes[*index].children.is_empty() {
+                    if self.nodes[*index].node_type.is_active_wood() && self.nodes[*index].children.is_empty() {
                         if rand::random_range(0.0..1.0) < NODE_ACTIVITY_PROBABILITY {
                             self.nodes[*index].length += GROWTH_RATE_LENGTH;
                         
@@ -168,30 +224,36 @@ impl Tree {
                         }
                     }
                 }
-                TreeEvent::Branch { parent, elevation, azimuth, is_active, next_bud_left } => {
-                    self.add_node(*parent, *elevation, *azimuth, 1.0, *is_active, *next_bud_left);
+                TreeEvent::Branch { parent, node_type, elevation, azimuth } => {
+                    let length = if node_type.is_leaf() { 0.0 } else { 1.0 };
+                    self.add_node(*parent, node_type.clone(), *elevation, *azimuth, length);
                 }
                 TreeEvent::Activate(index) => {
-                    self.nodes[*index].is_active = true;
+                    if self.nodes[*index].node_type.is_inactive_wood() {
+                        self.nodes[*index].node_type.set_active(true);
+                    }
                 }
                 TreeEvent::Deactivate(index) => {
-                    self.nodes[*index].is_active = false;
+                    if self.nodes[*index].node_type.is_active_wood() {
+                        self.nodes[*index].node_type.set_active(false);
+                    }
                 }
 
             }
         }
     }
 
-    fn add_node(&mut self, parent_index: usize, elevation: f32, azimuth: f32, length: f32, is_active: bool, next_bud_left: bool) {
+    fn add_node(&mut self, parent_index: usize, node_type: NodeType, elevation: f32, azimuth: f32, length: f32) {
         let new_node_index = self.nodes.len();
-        self.nodes.push(TreeNode::new(Some(parent_index), elevation, azimuth, length, is_active, next_bud_left));
+        self.nodes.push(TreeNode::new(Some(parent_index), node_type, elevation, azimuth, length));
         self.nodes[parent_index].children.push(new_node_index);
     }
+
 }
 
 enum TreeEvent {
     Grow(usize),
-    Branch { parent: usize, elevation: f32, azimuth: f32, is_active: bool, next_bud_left: bool },
+    Branch { parent: usize, node_type: NodeType, elevation: f32, azimuth: f32 },
     Deactivate(usize),
     Activate(usize),
 }
@@ -203,6 +265,40 @@ struct Segment {
     x4: f32, y4: f32,
     radius: f32,
     sweep: bool,
+}
+
+struct Leaf {
+    // Petiole start
+    px: f32, py: f32,
+    // Base (petiole end / fan origin)
+    bx: f32, by: f32,
+    // Stem to bottom left arc endpoint
+    blx: f32, bly: f32,
+    bl_radius: f32,
+    // Bottom left corner
+    lcx: f32, lcy: f32,
+    // Left corner arc endpoint
+    lax: f32, lay: f32,
+    la_radius: f32,
+    // Divot left cubic endpoint + controls
+    dlx: f32, dly: f32,
+    dl_c1x: f32, dl_c1y: f32,
+    dl_c2x: f32, dl_c2y: f32,
+    // Divot right cubic endpoint + controls
+    drx: f32, dry: f32,
+    dr_c1x: f32, dr_c1y: f32,
+    dr_c2x: f32, dr_c2y: f32,
+    // Right corner arc endpoint
+    rax: f32, ray: f32,
+    ra_radius: f32,
+    // Bottom right corner
+    rcx: f32, rcy: f32,
+    // Stem to base arc endpoint
+    srx: f32, sry: f32,
+    sr_radius: f32,
+    // Arc sweeps
+    stem_sweep: bool,
+    corner_sweep: bool,
 }
 
 impl From<&Segment> for SegmentData {
@@ -218,73 +314,118 @@ impl From<&Segment> for SegmentData {
     }
 }
 
-fn tree_to_model(tree: &Tree, origin: (f32, f32)) -> ModelRc<SegmentData> {
-    let mut segments = Vec::new();
-    nodes_to_segments(tree, 0, origin, &mut segments);
-    let slint_segments: Vec<SegmentData> = segments.iter().map(SegmentData::from).collect();
-    ModelRc::new(VecModel::from(slint_segments))
+impl From<&Leaf> for LeafData {
+    fn from(l: &Leaf) -> Self {
+        LeafData {
+            px: l.px, py: l.py,
+            bx: l.bx, by: l.by,
+            blx: l.blx, bly: l.bly, bl_radius: l.bl_radius,
+            lcx: l.lcx, lcy: l.lcy,
+            lax: l.lax, lay: l.lay, la_radius: l.la_radius,
+            dlx: l.dlx, dly: l.dly, dl_c1x: l.dl_c1x, dl_c1y: l.dl_c1y, dl_c2x: l.dl_c2x, dl_c2y: l.dl_c2y,
+            drx: l.drx, dry: l.dry, dr_c1x: l.dr_c1x, dr_c1y: l.dr_c1y, dr_c2x: l.dr_c2x, dr_c2y: l.dr_c2y,
+            rax: l.rax, ray: l.ray, ra_radius: l.ra_radius,
+            rcx: l.rcx, rcy: l.rcy,
+            srx: l.srx, sry: l.sry, sr_radius: l.sr_radius,
+            stem_sweep: l.stem_sweep,
+            corner_sweep: l.corner_sweep,
+        }
+    }
 }
 
-/// Recursively converts tree nodes to segments for rendering. 
-/// 
-/// Each node is represented as a rectangle (segment) with thickness based on the number of pipes. The function calculates the end position of each segment based on the node's length and elevation, and then computes the corners of the rectangle to create a visually appealing branch. 
-/// It also applies an overlap for child segments to ensure they connect smoothly to their parent segments.
-fn nodes_to_segments(tree: &Tree, node_index: usize, pos: (f32, f32), cells: &mut Vec<Segment>) {
+fn tree_to_model(tree: &Tree, origin: (f32, f32)) -> (ModelRc<SegmentData>, ModelRc<LeafData>) {
+    let mut segments = Vec::new();
+    let mut leaves = Vec::new();
+    nodes_to_renderables(tree, 0, origin, &mut segments, &mut leaves);
+    let slint_segments: Vec<SegmentData> = segments.iter().map(SegmentData::from).collect();
+    let slint_leaves: Vec<LeafData> = leaves.iter().map(LeafData::from).collect();
+    (ModelRc::new(VecModel::from(slint_segments)), ModelRc::new(VecModel::from(slint_leaves)))
+}
+
+fn nodes_to_renderables(tree: &Tree, node_index: usize, pos: (f32, f32), segments: &mut Vec<Segment>, leaves: &mut Vec<Leaf>) {
     let node = &tree.nodes[node_index];
-    let thickness = node.thickness*5.0; // scale thickness for better visibility
     let elevation_rad = node.elevation.to_radians();
-
-    // calculate end position of the segment based on length and elevation
     let end = (pos.0 + (node.length as f32 * elevation_rad.cos()), pos.1 - (node.length as f32 * elevation_rad.sin()));
-    let dx = end.0 - pos.0;
-    let dy = end.1 - pos.1;
-    let len = (dx*dx + dy*dy).sqrt();
-    // perpendicular unit vector
-    let px = -dy / len * (thickness / 2.0);
-    let py = dx / len * (thickness / 2.0);
+    if node.node_type.is_wood() {
+        let thickness = node.thickness * BRANCH_THICKNESS_FACTOR; // scale thickness for better visibility
 
-    // compute corners of the rectangle representing the branch segment
-    let (c1, c2, c3, c4) = if node.elevation > 90.0 {
-        ((pos.0 - px, pos.1 - py), (pos.0 + px, pos.1 + py),
-        (end.0 + px, end.1 + py), (end.0 - px, end.1 - py))
-    } else {
-        ((pos.0 + px, pos.1 + py), (pos.0 - px, pos.1 - py),
-        (end.0 - px, end.1 - py), (end.0 + px, end.1 + py))
-    };
+        // calculate end position of the segment based on length and elevation
+        let dx = end.0 - pos.0;
+        let dy = end.1 - pos.1;
+        let len = (dx*dx + dy*dy).sqrt();
+        // perpendicular unit vector
+        let px = -dy / len * (thickness / 2.0);
+        let py = dx / len * (thickness / 2.0);
 
-    let cross = (c2.0 - c1.0) * (c3.1 - c2.1) - (c2.1 - c1.1) * (c3.0 - c2.0);
-    if cross > 0.0 {
-        // swap to reverse winding
-        cells.push(Segment {
-            x1: pos.0 - px, y1: pos.1 - py,
-            x2: pos.0 + px, y2: pos.1 + py,
-            x3: end.0 + px, y3: end.1 + py,
-            x4: end.0 - px, y4: end.1 - py,
-            radius: thickness / 2.0,
-            sweep: false,
-        });
-    } else {
-        cells.push(Segment {
-            x1: pos.0 + px, y1: pos.1 + py,
-            x2: pos.0 - px, y2: pos.1 - py,
-            x3: end.0 - px, y3: end.1 - py,
+        // compute corners of the rectangle representing the branch segment
+        let x1 = pos.0 + px;
+        let y1 = pos.1 + py;
+        let x2 = pos.0 - px;
+        let y2 = pos.1 - py;
+        let x3 = end.0 - px;
+        let y3 = end.1 - py;
+
+        let cross = (x2 - x1) * (y3 - y2) - (y2 - y1) * (x3 - x2);
+        segments.push(Segment {
+            x1, y1, x2, y2, x3, y3,
             x4: end.0 + px, y4: end.1 + py,
             radius: thickness / 2.0,
-            sweep: true,
+            sweep: cross >= 0.0,
         });
+
+    } else if node.node_type.is_leaf() {
+        let parent = &tree.nodes[node.parent.unwrap()];
+        let visual_half = parent.thickness * BRANCH_THICKNESS_FACTOR / 2.0;
+        let parent_rad = parent.elevation.to_radians();
+        let start_x = pos.0 + visual_half * parent_rad.cos();
+        let start_y = pos.1 - visual_half * parent_rad.sin();
+        leaves.push(leaf_to_points(start_x, start_y, node.elevation, 12.0));
     }
 
-    let parent_thickness = tree.nodes[node_index].thickness;
-
     for child in &node.children {
-        let child_node = &tree.nodes[*child];
-        let child_elevation_rad = child_node.elevation.to_radians();
-        let overlap = parent_thickness / 2.0;
-        let child_start = (
-            end.0 - overlap * child_elevation_rad.cos(),
-            end.1 + overlap * child_elevation_rad.sin(),
-        );
-        nodes_to_segments(tree, *child, child_start, cells);
+        nodes_to_renderables(tree, *child, end, segments, leaves);
+    }
+}
+
+
+fn leaf_to_points(x: f32, y: f32, angle: f32, size: f32) -> Leaf {
+    let cos_a = angle.to_radians().cos();
+    let sin_a = angle.to_radians().sin();
+
+    // Transform a normalized point to screen coordinates
+    let t = |nx: f32, ny: f32| -> (f32, f32) {
+        (x + (-ny * cos_a + nx * sin_a) * size,
+        y + ( ny * sin_a + nx * cos_a) * size)
+    };
+
+    let (px, py) = t(0.0, 0.0);           // petiole start at origin
+    let (bx, by) = t(0.0, -0.3125);       // fan base
+    let (blx, bly) = t(-0.25, -0.5625);
+    let (lcx, lcy) = t(-0.875, -0.5625);
+    let (lax, lay) = t(-1.0, -0.6875);
+    let (dlx, dly) = t(0.0, -1.1875);
+    let (dl_c1x, dl_c1y) = t(-0.875, -1.3125);
+    let (dl_c2x, dl_c2y) = t(0.0, -1.5625);
+    let (drx, dry) = t(1.0, -0.6875);
+    let (dr_c1x, dr_c1y) = t(0.0, -1.5625);
+    let (dr_c2x, dr_c2y) = t(0.875, -1.3125);
+    let (rax, ray) = t(0.875, -0.5625);
+    let (rcx, rcy) = t(0.25, -0.5625);
+    let (srx, sry) = t(0.0, -0.3125);
+
+    Leaf {
+        px, py,
+        bx, by,
+        blx, bly, bl_radius: 0.25 * size,
+        lcx, lcy,
+        lax, lay, la_radius: 0.125 * size,
+        dlx, dly, dl_c1x, dl_c1y, dl_c2x, dl_c2y,
+        drx, dry, dr_c1x, dr_c1y, dr_c2x, dr_c2y,
+        rax, ray, ra_radius: 0.125 * size,
+        rcx, rcy,
+        srx, sry, sr_radius: 0.25 * size,
+        stem_sweep: false,
+        corner_sweep: true,
     }
 }
 
@@ -318,14 +459,16 @@ fn main() -> Result<(), Box<dyn Error>> {
         });        
     }).unwrap();
 
-    // Create a tree data structure and add some nodes to it
+    // Create a tree data structure
     let mut tree = Tree::new(); 
 
-     // Start the timer to update the glyph text every second with a random character
+     // start the slint timer
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(CLOCK_INTERVAL_MS), move || {
         let app = weak_for_timer.unwrap();
         let _events = tree.tick();
-        app.set_segments(tree_to_model(&tree, origin));
+        let (segments, leaves) = tree_to_model(&tree, origin);
+        app.set_leaves(leaves);
+        app.set_segments(segments);
     }); 
 
     // Run the app

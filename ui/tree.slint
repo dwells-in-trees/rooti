@@ -7,6 +7,21 @@ export struct SegmentData {
     sweep: bool,
 }
 
+export struct LeafData {
+    px: float, py: float,
+    bx: float, by: float,
+    blx: float, bly: float, bl_radius: float,
+    lcx: float, lcy: float,
+    lax: float, lay: float, la_radius: float,
+    dlx: float, dly: float, dl_c1x: float, dl_c1y: float, dl_c2x: float, dl_c2y: float,
+    drx: float, dry: float, dr_c1x: float, dr_c1y: float, dr_c2x: float, dr_c2y: float,
+    rax: float, ray: float, ra_radius: float,
+    rcx: float, rcy: float,
+    srx: float, sry: float, sr_radius: float,
+    stem_sweep: bool,
+    corner_sweep: bool,
+}
+
 export component AppWindow inherits Window {
     no-frame: true;
     background: transparent;
@@ -43,5 +58,38 @@ export component AppWindow inherits Window {
             sweep: segment.sweep;
         }
         Close{}
+    }
+
+    in property <[LeafData]> leaves;
+    for leaf in leaves : Path {
+        width: 100%;
+        height: 100%;
+        viewbox-x: 0;
+        viewbox-y: 0;
+        viewbox-width: root.width / 1px;
+        viewbox-height: root.height / 1px;
+        fill: green;
+        stroke: darkgreen;
+        stroke-width: 1px;
+        // Petiole
+        MoveTo { x: leaf.px; y: leaf.py; }
+        LineTo { x: leaf.bx; y: leaf.by; }
+        // stem to bottom left
+        ArcTo { x: leaf.blx; y: leaf.bly; radius-x: leaf.bl-radius; radius-y: leaf.bl-radius; sweep: leaf.stem-sweep; }
+        // bottom left to left curve
+        LineTo { x: leaf.lcx; y: leaf.lcy; }
+        // bottom left corner arc
+        ArcTo { x: leaf.lax; y: leaf.lay; radius-x: leaf.la-radius; radius-y: leaf.la-radius; sweep: leaf.corner-sweep; }
+        // divot left arc
+        CubicTo { x: leaf.dlx; y: leaf.dly; control-1-x: leaf.dl-c1x; control-1-y: leaf.dl-c1y; control-2-x: leaf.dl-c2x; control-2-y: leaf.dl-c2y; }
+        // divot right arc
+        CubicTo { x: leaf.drx; y: leaf.dry; control-1-x: leaf.dr-c1x; control-1-y: leaf.dr-c1y; control-2-x: leaf.dr-c2x; control-2-y: leaf.dr-c2y; }
+        // bottom right corner arc
+        ArcTo { x: leaf.rax; y: leaf.ray; radius-x: leaf.ra-radius; radius-y: leaf.ra-radius; sweep: leaf.corner-sweep; }
+        // bottom right to stem
+        LineTo { x: leaf.rcx; y: leaf.rcy; }
+        // stem to base
+        ArcTo { x: leaf.srx; y: leaf.sry; radius-x: leaf.sr-radius; radius-y: leaf.sr-radius; sweep: leaf.stem-sweep; }
+        Close {}
     }
 }   
