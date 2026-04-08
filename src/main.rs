@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use slint::*;
-use i_slint_backend_winit::WinitWindowAccessor;
+use i_slint_backend_winit::{WinitWindowAccessor, winit::platform::windows::WindowExtWindows};
 use display_info::DisplayInfo;
 use std::{ error::Error, rc::Rc, cell::RefCell };
 
@@ -481,6 +481,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         app.window().set_maximized(true);
         app.window().with_winit_window(|winit_win| {
             winit_win.set_cursor_hittest(false).unwrap();
+            winit_win.set_skip_taskbar(true);
         });        
     }).unwrap();
 
