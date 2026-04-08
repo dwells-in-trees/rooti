@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use slint::*;
 use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
