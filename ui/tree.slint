@@ -1,3 +1,4 @@
+import { Button, Slider } from "std-widgets.slint";
 export struct SegmentData {
     x1: float, y1: float,
     x2: float, y2: float,
@@ -20,6 +21,80 @@ export struct LeafData {
     srx: float, sry: float, sr_radius: float,
     stem_sweep: bool,
     corner_sweep: bool,
+}
+
+export component SettingsWindow inherits Window {
+    title: "Tree Settings";
+    height: 620px;
+    width: 320px;
+    default-font-family: "Consolas";
+
+    callback reset-tree();
+
+    in-out property <float> node-activity-probability: 0.30;
+    in-out property <float> branch-threshold: 50.0;
+    in-out property <float> branch-elevation: 40.0;
+    in-out property <float> branch-thickness-factor: 1.0;
+    in-out property <float> branch-random-variation: 15.0;
+    in-out property <float> growth-rate-length: 1.0;
+    in-out property <float> auxin-production: 10.0;
+    in-out property <float> auxin-threshold: 0.1;
+    in-out property <float> auxin-consumption-rate: 0.05;
+    in-out property <float> min-activation-age: 100;
+    in-out property <float> gravitropism-threshold: 80.0;
+    in-out property <float> gravitropism-rate: 0.1;
+    in-out property <bool> paused: false;
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 4px;
+
+        Text { text: "Activity Prob: " + Math.round(root.node-activity-probability * 100) + "%"; }
+        Slider { minimum: 0; maximum: 1; value <=> root.node-activity-probability; }
+
+        Text { text: "Branch Threshold: " + Math.round(root.branch-threshold); }
+        Slider { minimum: 10; maximum: 200; value <=> root.branch-threshold; }
+
+        Text { text: "Branch Elevation: " + Math.round(root.branch-elevation) + "°"; }
+        Slider { minimum: 5; maximum: 80; value <=> root.branch-elevation; }
+
+        Text { text: "Thickness Factor: " + Math.round(root.branch-thickness-factor * 10) / 10; }
+        Slider { minimum: 0.1; maximum: 5; value <=> root.branch-thickness-factor; }
+
+        Text { text: "Random Variation: " + Math.round(root.branch-random-variation) + "°"; }
+        Slider { minimum: 0; maximum: 45; value <=> root.branch-random-variation; }
+
+        Text { text: "Growth Rate: " + Math.round(root.growth-rate-length * 10) / 10; }
+        Slider { minimum: 0.1; maximum: 5; value <=> root.growth-rate-length; }
+
+        Text { text: "Auxin Production: " + Math.round(root.auxin-production); }
+        Slider { minimum: 0; maximum: 50; value <=> root.auxin-production; }
+
+        Text { text: "Auxin Threshold: " + Math.round(root.auxin-threshold * 100) / 100; }
+        Slider { minimum: 0; maximum: 5; value <=> root.auxin-threshold; }
+
+        Text { text: "Auxin Consumption: " + Math.round(root.auxin-consumption-rate * 100) / 100; }
+        Slider { minimum: 0; maximum: 1; value <=> root.auxin-consumption-rate; }
+
+        Text { text: "Min Activation Age: " + Math.round(root.min-activation-age); }
+        Slider { minimum: 0; maximum: 500; value <=> root.min-activation-age; }
+
+        Text { text: "Gravitropism Threshold: " + Math.round(root.gravitropism-threshold) + "°"; }
+        Slider { minimum: 0; maximum: 90; value <=> root.gravitropism-threshold; }
+
+        Text { text: "Gravitropism Rate: " + Math.round(root.gravitropism-rate * 100) / 100; }
+        Slider { minimum: 0; maximum: 1; value <=> root.gravitropism-rate; }
+
+        Button {
+            text: root.paused ? "▶ Play" : "⏸ Pause";
+            clicked => { root.paused = !root.paused; }
+        }
+
+        Button {
+            text: "Reset Tree";
+            clicked => { root.reset-tree(); }
+        }
+    }
 }
 
 export component AppWindow inherits Window {

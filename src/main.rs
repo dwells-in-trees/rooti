@@ -1,44 +1,43 @@
 use slint::*;
 use i_slint_backend_winit::WinitWindowAccessor;
 use display_info::DisplayInfo;
-use std::{error::Error };
+use std::{ error::Error, rc::Rc, cell::RefCell };
 
+const CLOCK_INTERVAL_MS: u64 = 5;
 
 struct TreeConfig {
     // Consistent simulation parameters
-    CLOCK_INTERVAL_MS: u64,
-    NODE_ACTIVITY_PROBABILITY: f32,
+    node_activity_probability: f32,
 
     // Tree specific parameters
-    BRANCH_THRESHOLD: f32,
-    BRANCH_ELEVATION: f32,
-    BRANCH_THICKNESS_FACTOR: f32,
-    BRANCH_RANDOM_VARIATION: f32,
-    GROWTH_RATE_LENGTH: f32,
-    AUXIN_PRODUCTION: f32,
-    AUXIN_THRESHOLD: f32,
-    AUXIN_CONSUMPTION_RATE: f32,
-    MIN_ACTIVATION_AGE: u32,
-    GRAVITROPISM_THRESHOLD: f32, // degrees from 90° before correction kicks in
-    GRAVITROPISM_RATE: f32,
+    branch_threshold: f32,
+    branch_elevation: f32,
+    branch_thickness_factor: f32,
+    branch_random_variation: f32,
+    growth_rate_length: f32,
+    auxin_production: f32,
+    auxin_threshold: f32,
+    auxin_consumption_rate: f32,
+    min_activation_age: u32,
+    gravitropism_threshold: f32, // degrees from 90° before correction kicks in
+    gravitropism_rate: f32,
 }
 
 impl TreeConfig {
-    fn defualt() -> Self {
+    fn default() -> Self {
         Self {
-            CLOCK_INTERVAL_MS: 5,
-            NODE_ACTIVITY_PROBABILITY: 0.30,
-            BRANCH_THRESHOLD: 50.0,
-            BRANCH_ELEVATION: 40.0,
-            BRANCH_THICKNESS_FACTOR: 1.0,
-            BRANCH_RANDOM_VARIATION: 15.0,
-            GROWTH_RATE_LENGTH: 1.0,
-            AUXIN_PRODUCTION: 10.0,
-            AUXIN_THRESHOLD: 0.1,
-            AUXIN_CONSUMPTION_RATE: 0.05,
-            MIN_ACTIVATION_AGE: 100,
-            GRAVITROPISM_THRESHOLD: 80.0, // degrees from 90° before correction kicks in
-            GRAVITROPISM_RATE: 0.1,
+            node_activity_probability: 0.30,
+            branch_threshold: 50.0,
+            branch_elevation: 40.0,
+            branch_thickness_factor: 1.0,
+            branch_random_variation: 15.0,
+            growth_rate_length: 1.0,
+            auxin_production: 10.0,
+            auxin_threshold: 0.1,
+            auxin_consumption_rate: 0.05,
+            min_activation_age: 100,
+            gravitropism_threshold: 80.0, // degrees from 90° before correction kicks in
+            gravitropism_rate: 0.1,
         }
     }
 }
@@ -117,23 +116,23 @@ impl Tree {
     }
 
 
-    fn tick(&mut self) -> Vec<TreeEvent> {
+    fn tick(&mut self, config: &TreeConfig) -> Vec<TreeEvent> {
         let mut events = Vec::new();
         
-        self.update_auxin();
+        self.update_auxin(config);
         self.update_pipes();
 
         // iterate through all nodes and generate growth events
         for (index, node) in self.nodes.iter().enumerate() {
             events.push(TreeEvent::Grow(index));
-            if node.node_type.is_active_wood() && node.length >= BRANCH_THRESHOLD && node.children.is_empty() {
+            if node.node_type.is_active_wood() && node.length >= config.branch_threshold && node.children.is_empty() {
 
-                let offset = if node.node_type.left_node() { -BRANCH_ELEVATION } else { BRANCH_ELEVATION };
+                let offset = if node.node_type.left_node() { -config.branch_elevation } else { config.branch_elevation };
                 
                 // Capture the randomized elevation for the continuation segment first
-                let continuation_elevation = node.elevation + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION);
-                let branch_elevation = node.elevation + offset + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION);
-                let leaf_elevation = 2.0 * node.elevation -branch_elevation + rand::random_range(-BRANCH_RANDOM_VARIATION..=BRANCH_RANDOM_VARIATION); // opposite side of the branch
+                let continuation_elevation = node.elevation + rand::random_range(-config.branch_random_variation..=config.branch_random_variation);
+                let branch_elevation = node.elevation + offset + rand::random_range(-config.branch_random_variation..=config.branch_random_variation);
+                let leaf_elevation = 2.0 * node.elevation -branch_elevation + rand::random_range(-config.branch_random_variation..=config.branch_random_variation); // opposite side of the branch
 
                 events.push(TreeEvent::Branch { 
                     parent: index, 
@@ -156,40 +155,40 @@ impl Tree {
                 });
                 events.push(TreeEvent::Deactivate(index));
             } else if node.node_type.is_inactive_wood() {
-                if node.age >= MIN_ACTIVATION_AGE {
+                if node.age >= config.min_activation_age {
                     if let Some(parent_idx) = node.parent {
-                        if self.nodes[parent_idx].auxin_received <= AUXIN_THRESHOLD {
+                        if self.nodes[parent_idx].auxin_received <= config.auxin_threshold {
                             events.push(TreeEvent::Activate(index));
                         }
                     }
                 }
-            } else if node.node_type.is_active_wood() && node.auxin_received > AUXIN_THRESHOLD {
+            } else if node.node_type.is_active_wood() && node.auxin_received > config.auxin_threshold {
                 events.push(TreeEvent::Deactivate(index));
             }
         }
-        self.apply_events(&events);
+        self.apply_events(&events, config);
         events
     }
 
-    fn update_auxin(&mut self) {
+    fn update_auxin(&mut self, config: &TreeConfig) {
         let mut auxin_values = vec![0.0f32; self.nodes.len()];
-        self.compute_auxin(0, &mut auxin_values);
+        self.compute_auxin(0, &mut auxin_values, config);
         for (index, value) in auxin_values.iter().enumerate() {
             self.nodes[index].auxin_received = *value;
         }
     }
 
-    fn compute_auxin(&self, node_index: usize, values: &mut Vec<f32>) -> f32 {
+    fn compute_auxin(&self, node_index: usize, values: &mut Vec<f32>, config: &TreeConfig) -> f32 {
         let node = &self.nodes[node_index];
         let children = node.children.clone();
         
         let mut received = 0.0;
         for child in children {
-            received += self.compute_auxin(child, values);
+            received += self.compute_auxin(child, values, config);
         }
         
-        let produced = if node.node_type.is_active_wood() { AUXIN_PRODUCTION } else { 0.0 };
-        let consumed = node.length * node.thickness * AUXIN_CONSUMPTION_RATE;
+        let produced = if node.node_type.is_active_wood() { config.auxin_production } else { 0.0 };
+        let consumed = node.length * node.thickness * config.auxin_consumption_rate;
         let surplus = (produced + received - consumed).max(0.0);
         
         values[node_index] = received;
@@ -221,22 +220,22 @@ impl Tree {
         sum_pipes
     }
 
-    fn apply_events(&mut self, events: &[TreeEvent]) {
+    fn apply_events(&mut self, events: &[TreeEvent], config: &TreeConfig) {
         for event in events {
             match event {
                 TreeEvent::Grow(index) => {
                     self.nodes[*index].age += 1;
                     if self.nodes[*index].node_type.is_active_wood() && self.nodes[*index].children.is_empty() {
-                        if rand::random_range(0.0..1.0) < NODE_ACTIVITY_PROBABILITY {
-                            self.nodes[*index].length += GROWTH_RATE_LENGTH;
+                        if rand::random_range(0.0..1.0) < config.node_activity_probability {
+                            self.nodes[*index].length += config.growth_rate_length;
                         
                             // Gravitropic correction
                             let deviation = self.nodes[*index].elevation - 90.0;
-                            if deviation.abs() > GRAVITROPISM_THRESHOLD {
-                                let excess = deviation.abs() - GRAVITROPISM_THRESHOLD;
-                                let max_excess = 90.0 - GRAVITROPISM_THRESHOLD; // how far past threshold is possible
+                            if deviation.abs() > config.gravitropism_threshold {
+                                let excess = deviation.abs() - config.gravitropism_threshold;
+                                let max_excess = 90.0 - config.gravitropism_threshold; // how far past threshold is possible
                                 let strength = excess / max_excess; // 0.0 at threshold, 1.0 at horizontal
-                                let correction = GRAVITROPISM_RATE * strength;
+                                let correction = config.gravitropism_rate * strength;
                                 if deviation > 0.0 {
                                     self.nodes[*index].elevation -= correction;
                                 } else {
@@ -355,21 +354,21 @@ impl From<&Leaf> for LeafData {
     }
 }
 
-fn tree_to_model(tree: &Tree, origin: (f32, f32)) -> (ModelRc<SegmentData>, ModelRc<LeafData>) {
+fn tree_to_model(tree: &Tree, config: &TreeConfig, origin: (f32, f32)) -> (ModelRc<SegmentData>, ModelRc<LeafData>) {
     let mut segments = Vec::new();
     let mut leaves = Vec::new();
-    nodes_to_renderables(tree, 0, origin, &mut segments, &mut leaves);
+    nodes_to_renderables(tree, 0, config, origin, &mut segments, &mut leaves);
     let slint_segments: Vec<SegmentData> = segments.iter().map(SegmentData::from).collect();
     let slint_leaves: Vec<LeafData> = leaves.iter().map(LeafData::from).collect();
     (ModelRc::new(VecModel::from(slint_segments)), ModelRc::new(VecModel::from(slint_leaves)))
 }
 
-fn nodes_to_renderables(tree: &Tree, node_index: usize, pos: (f32, f32), segments: &mut Vec<Segment>, leaves: &mut Vec<Leaf>) {
+fn nodes_to_renderables(tree: &Tree, node_index: usize, config: &TreeConfig, pos: (f32, f32), segments: &mut Vec<Segment>, leaves: &mut Vec<Leaf>) {
     let node = &tree.nodes[node_index];
     let elevation_rad = node.elevation.to_radians();
     let end = (pos.0 + (node.length as f32 * elevation_rad.cos()), pos.1 - (node.length as f32 * elevation_rad.sin()));
     if node.node_type.is_wood() {
-        let thickness = node.thickness * BRANCH_THICKNESS_FACTOR; // scale thickness for better visibility
+        let thickness = node.thickness * config.branch_thickness_factor; // scale thickness for better visibility
 
         // calculate end position of the segment based on length and elevation
         let dx = end.0 - pos.0;
@@ -397,7 +396,7 @@ fn nodes_to_renderables(tree: &Tree, node_index: usize, pos: (f32, f32), segment
 
     } else if node.node_type.is_leaf() {
         let parent = &tree.nodes[node.parent.unwrap()];
-        let visual_half = parent.thickness * BRANCH_THICKNESS_FACTOR / 2.0;
+        let visual_half = parent.thickness * config.branch_thickness_factor / 2.0;
         let parent_rad = parent.elevation.to_radians();
         let start_x = pos.0 + visual_half * parent_rad.cos();
         let start_y = pos.1 - visual_half * parent_rad.sin();
@@ -405,7 +404,7 @@ fn nodes_to_renderables(tree: &Tree, node_index: usize, pos: (f32, f32), segment
     }
 
     for child in &node.children {
-        nodes_to_renderables(tree, *child, end, segments, leaves);
+        nodes_to_renderables(tree, *child, config, end, segments, leaves);
     }
 }
 
@@ -455,8 +454,10 @@ slint::include_modules!();
 fn main() -> Result<(), Box<dyn Error>> {
     // Decalare App and create weak references for the event loop and timer
     let app = AppWindow::new()?;
+    let settings= SettingsWindow::new()?;
     let weak_for_winit = app.as_weak();
     let weak_for_timer = app.as_weak();
+    let weak_settings = settings.as_weak();
 
     // Declare timer
     let timer = slint::Timer::default();
@@ -482,18 +483,50 @@ fn main() -> Result<(), Box<dyn Error>> {
     }).unwrap();
 
     // Create a tree data structure
-    let mut tree = Tree::new(); 
+    let tree = Rc::new(RefCell::new(Tree::new()));
+    let tree_for_timer = tree.clone();
+    let tree_for_reset = tree.clone();
 
-     // start the slint timer
+    // callback for resetting tree
+    settings.on_reset_tree(move || {
+        *tree_for_reset.borrow_mut() = Tree::new();
+    });
+
+    // start the slint timer
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(CLOCK_INTERVAL_MS), move || {
         let app = weak_for_timer.unwrap();
-        let _events = tree.tick();
-        let (segments, leaves) = tree_to_model(&tree, origin);
+        let settings = weak_settings.unwrap();
+
+        if !settings.get_paused() {
+            let config = TreeConfig {
+                node_activity_probability: settings.get_node_activity_probability(),
+                branch_threshold: settings.get_branch_threshold(),
+                branch_elevation: settings.get_branch_elevation(),
+                branch_thickness_factor: settings.get_branch_thickness_factor(),
+                branch_random_variation: settings.get_branch_random_variation(),
+                growth_rate_length: settings.get_growth_rate_length(),
+                auxin_production: settings.get_auxin_production(),
+                auxin_threshold: settings.get_auxin_threshold(),
+                auxin_consumption_rate: settings.get_auxin_consumption_rate(),
+                min_activation_age: settings.get_min_activation_age() as u32,
+                gravitropism_threshold: settings.get_gravitropism_threshold(),
+                gravitropism_rate: settings.get_gravitropism_rate(),
+            };
+            let _events = tree_for_timer.borrow_mut().tick(&config);
+        }
+
+        let _config_for_render = TreeConfig {
+            branch_thickness_factor: settings.get_branch_thickness_factor(),
+            ..TreeConfig::default()
+        };
+
+        let (segments, leaves) = tree_to_model(&tree_for_timer.borrow(), &_config_for_render, origin);
         app.set_leaves(leaves);
         app.set_segments(segments);
-    }); 
+    });
 
     // Run the app
+    let _s = settings.show();
     app.run()?;
     Ok(())
 }
