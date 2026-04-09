@@ -1,12 +1,21 @@
 # Changelog
 
-## [v0.2.0] - 2026-04-09
+## [v0.2.1] - 2026-04-09
 
 ### Changed
 
 - Adjust window configuration to hide main canvas taskbar icon
 
-## [v0.2.0] - 2026-04-09
+### Fixed
+
+- Limit gravitropism threshold to 89 degrees in menu to prevent crash *(ui)*
+- Limit gravitropism threshold to 89 degrees in menu to prevent crash *(ui)*
+
+### Misc
+
+- Add git cliff for changelog generation
+
+## [v0.2.0] - 2026-04-08
 
 ### Added
 
