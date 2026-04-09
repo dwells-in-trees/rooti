@@ -80,7 +80,7 @@ export component SettingsWindow inherits Window {
         Slider { minimum: 0; maximum: 500; value <=> root.min-activation-age; }
 
         Text { text: "Gravitropism Threshold: " + Math.round(root.gravitropism-threshold) + "°"; }
-        Slider { minimum: 0; maximum: 90; value <=> root.gravitropism-threshold; }
+        Slider { minimum: 0; maximum: 89; value <=> root.gravitropism-threshold; }
 
         Text { text: "Gravitropism Rate: " + Math.round(root.gravitropism-rate * 100) / 100; }
         Slider { minimum: 0; maximum: 1; value <=> root.gravitropism-rate; }
