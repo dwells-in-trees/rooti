@@ -12,7 +12,14 @@ serde = { version = "1.0.228", features = ["derive"] }
 display-info = "0.5.9"
 i-slint-backend-winit = "=1.15.1"
 rand = "0.10.0"
+cliff = "0.3.2"
 
 [build-dependencies]
 slint-build = "1.15"
 winresource = "0.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"        
+strip = true       
+codegen-units = 1  

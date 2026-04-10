@@ -787,6 +787,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cliff"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ef5a5f30e3cf3ab05f4d7eab23ae080f4b5493a1d6b936933fe7530a6b31676"
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1107,6 +1113,7 @@ dependencies = [
 name = "desktop-tree"
 version = "0.2.1"
 dependencies = [
+ "cliff",
  "display-info",
  "i-slint-backend-winit",
  "rand 0.10.0",
