@@ -4,6 +4,7 @@
 
 # IDE files
 desktop-tree.code-workspace
+/.idea
 
 # Backups
 *.bak
