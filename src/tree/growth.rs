@@ -1,4 +1,4 @@
-use crate::tree::{biology, TreeConfig};
+use crate::tree::{biology, TreeConfig, NULL_IDX};
 use super::node::{Tree, NodeType };
 
 pub enum TreeEvent {
@@ -17,7 +17,7 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
     // iterate through all nodes and generate growth events
     for (index, node) in tree.nodes.iter().enumerate() {
         events.push(TreeEvent::Grow(index));
-        if node.node_type.is_active_wood() && node.length >= config.branch_threshold && node.children.is_empty() {
+        if node.node_type.is_active_wood() && node.length >= config.branch_threshold && node.first_child == NULL_IDX {
 
             let offset = if node.node_type.left_node() { -config.branch_elevation } else { config.branch_elevation };
 
@@ -48,16 +48,18 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
             events.push(TreeEvent::Deactivate(index));
         } else if node.node_type.is_inactive_wood() {
             if node.age >= config.min_activation_age {
-                if let Some(parent_idx) = node.parent {
-                    if tree.nodes[parent_idx].auxin_received <= config.auxin_threshold {
-                        events.push(TreeEvent::Activate(index));
-                    }
+                let parent_idx = node.parent;
+                if parent_idx != NULL_IDX && tree.nodes[parent_idx as usize].auxin_received <= config.auxin_threshold {
+                    events.push(TreeEvent::Activate(index));
                 }
             }
         } else if node.node_type.is_active_wood() && node.auxin_received > config.auxin_threshold {
             events.push(TreeEvent::Deactivate(index));
         }
     }
+    #[cfg(feature = "diagnostics")]
+    crate::diagnostics::print_status(tree.nodes.len());
+    
     apply_events(tree, &events, config);
     events
 }
@@ -67,7 +69,7 @@ fn apply_events(tree: &mut Tree, events: &[TreeEvent], config: &TreeConfig) {
         match event {
             TreeEvent::Grow(index) => {
                 tree.nodes[*index].age += 1;
-                if tree.nodes[*index].node_type.is_active_wood() && tree.nodes[*index].children.is_empty() {
+                if tree.nodes[*index].node_type.is_active_wood() && tree.nodes[*index].first_child == NULL_IDX {
                     if rand::random_range(0.0..1.0) < config.node_activity_probability {
                         tree.nodes[*index].length += config.growth_rate_length;
 
@@ -89,7 +91,7 @@ fn apply_events(tree: &mut Tree, events: &[TreeEvent], config: &TreeConfig) {
             }
             TreeEvent::Branch { parent, node_type, elevation, azimuth } => {
                 let length = if node_type.is_leaf() { 0.0 } else { 1.0 };
-                tree.add_node(*parent, node_type.clone(), *elevation, *azimuth, length);
+                tree.add_node(*parent as u32, node_type.clone(), *elevation, *azimuth, length);
             }
             TreeEvent::Activate(index) => {
                 if tree.nodes[*index].node_type.is_inactive_wood() {

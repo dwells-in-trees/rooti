@@ -1,6 +1,6 @@
 use crate::render::{ leaves, RenderConfig };
 use crate::tree::node::Tree;
-use crate::tree::TreeConfig;
+use crate::tree::{TreeConfig, NULL_IDX};
 
 pub(crate) struct Segment {
     pub(crate) x1: f32, pub(crate) y1: f32,
@@ -47,6 +47,7 @@ pub(crate) struct Leaf {
 
 pub(crate) fn nodes_to_renderables(tree: &Tree, node_index: usize, tree_config: &TreeConfig, render_config: &RenderConfig, pos: (f32, f32), segments: &mut Vec<Segment>, leaves: &mut Vec<Leaf>) {
     let node = &tree.nodes[node_index];
+    let first_child = node.first_child;
     let elevation_rad = node.elevation.to_radians();
     let end = (pos.0 + (node.length * elevation_rad.cos()), pos.1 - (node.length * elevation_rad.sin()));
     if node.node_type.is_wood() {
@@ -77,15 +78,18 @@ pub(crate) fn nodes_to_renderables(tree: &Tree, node_index: usize, tree_config: 
         });
 
     } else if node.node_type.is_leaf() {
-        let parent = &tree.nodes[node.parent.unwrap()];
+        let parent = &tree.nodes[node.parent as usize];
         let visual_half = parent.thickness * render_config.branch_thickness_factor / 2.0;
         let parent_rad = parent.elevation.to_radians();
         let start_x = pos.0 + visual_half * parent_rad.cos();
         let start_y = pos.1 - visual_half * parent_rad.sin();
         leaves.push(leaves::leaf_to_points(start_x, start_y, node.elevation, &tree_config.leaf_shape, 12.0));
     }
-
-    for child in &node.children {
-        nodes_to_renderables(tree, *child, tree_config, render_config, end, segments, leaves);
+    
+    let mut cursor = first_child;
+    while cursor != NULL_IDX {
+        let next = tree.nodes[cursor as usize].next_sibling;
+        nodes_to_renderables(tree, cursor as usize, tree_config, render_config, end, segments, leaves);
+        cursor = next;
     }
 }
