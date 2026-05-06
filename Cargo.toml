@@ -13,6 +13,7 @@ display-info = "0.5.9"
 i-slint-backend-winit = "=1.15.1"
 rand = "0.10.0"
 cliff = "0.3.2"
+sysinfo = { version = "0.33", optional = true }
 
 [build-dependencies]
 slint-build = "1.15"
@@ -22,4 +23,7 @@ winresource = "0.1"
 opt-level = 3
 lto = "fat"        
 strip = true       
-codegen-units = 1  
+codegen-units = 1
+
+[features]
+diagnostics = ["sysinfo"]

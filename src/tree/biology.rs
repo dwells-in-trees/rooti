@@ -1,4 +1,4 @@
-use crate::tree::{Tree, TreeConfig};
+use crate::tree::{Tree, TreeConfig, NULL_IDX};
 
 
 pub(crate) fn update_auxin(tree: &mut Tree, config: &TreeConfig) {
@@ -10,12 +10,15 @@ pub(crate) fn update_auxin(tree: &mut Tree, config: &TreeConfig) {
 }
 
 fn compute_auxin(tree: &Tree, node_index: usize, values: &mut Vec<f32>, config: &TreeConfig) -> f32 {
-    let node = &tree.nodes[node_index];
-    let children = node.children.clone();
+    let node =  &tree.nodes[node_index];
+    let first_child = node.first_child;
 
     let mut received = 0.0;
-    for child in children {
-        received += compute_auxin(tree, child, values, config);
+    let mut cursor = first_child;
+    while cursor != NULL_IDX {
+        let next = tree.nodes[cursor as usize].next_sibling;
+        received += compute_auxin(tree, cursor as usize, values, config);
+        cursor = next;
     }
 
     let produced = if node.node_type.is_active_wood() { config.auxin_production } else { 0.0 };
@@ -35,15 +38,18 @@ pub(crate) fn update_pipes(tree: &mut Tree) {
 }
 
 fn compute_pipes(tree: &mut Tree, node_index: usize, values: &mut Vec<f32>) -> f32 {
-    let node = &tree.nodes[node_index];
-    let children = node.children.clone();
+    let node =  &tree.nodes[node_index];
+    let first_child = node.first_child;
 
     let mut sum_pipes = 0.0;
-    if children.is_empty() {
+    if first_child == NULL_IDX {
         sum_pipes = 1.0; // leaf node contributes 1 pipe
     } else {
-        for child in children {
-            sum_pipes += compute_pipes(tree, child, values).powf(2.0);
+        let mut cursor = first_child;
+        while cursor != NULL_IDX {
+            let next = tree.nodes[cursor as usize].next_sibling;
+            sum_pipes += compute_pipes(tree, cursor as usize, values).powf(2.0);
+            cursor = next;
         }
         sum_pipes = sum_pipes.sqrt();
     }
