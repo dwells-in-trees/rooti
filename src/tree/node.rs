@@ -1,10 +1,13 @@
+use crate::tree::NULL_IDX;
+
 pub struct Tree {
     pub(crate) nodes: Vec<TreeNode>,
 }
 
 pub struct TreeNode {
-    pub(crate) parent: Option<usize>,
-    pub(crate) children: Vec<usize>,
+    pub(crate) parent: u32,
+    pub(crate) first_child: u32,
+    pub(crate) next_sibling: u32,
     pub(crate) length: f32,
     pub(crate) thickness: f32,
     pub(crate) elevation: f32,
@@ -65,22 +68,24 @@ pub(crate) enum LeafShape {
 }
 
 impl TreeNode {
-    fn new(parent: Option<usize>, node_type: NodeType, elevation: f32, azimuth: f32, length: f32) -> Self {
-        Self { parent, children: Vec::new(), length, thickness: 0.5, elevation, azimuth, age: 0, node_type, auxin_received: 0.0 }
+    fn new(parent: u32, node_type: NodeType, elevation: f32, azimuth: f32, length: f32) -> Self {
+        Self { parent, first_child: NULL_IDX, next_sibling: NULL_IDX, length, thickness: 0.5, elevation, azimuth, age: 0, node_type, auxin_received: 0.0 }
     }
 }
 
 impl Tree {
     pub(crate) fn new() -> Self {
-        Self { nodes: vec![TreeNode::new(None, NodeType::Wood { is_active: true, left_node: false }, 90.0, 200.0, 1.0)] }
+        Self { nodes: vec![TreeNode::new(NULL_IDX, NodeType::Wood { is_active: true, left_node: false }, 90.0, 200.0, 1.0)] }
     }
 
-    pub(crate) fn add_node(&mut self, parent_index: usize, node_type: NodeType, elevation: f32, azimuth: f32, length: f32) {
-        let new_node_index = self.nodes.len();
-        self.nodes.push(TreeNode::new(Some(parent_index), node_type, elevation, azimuth, length));
-        self.nodes[parent_index].children.push(new_node_index);
+    pub(crate) fn add_node(&mut self, parent_index: u32, node_type: NodeType, elevation: f32, azimuth: f32, length: f32) {
+        let new_node_index = self.nodes.len() as u32;
+        let existing_first_child = self.nodes[parent_index as usize].first_child;
+        self.nodes.push(TreeNode::new(parent_index, node_type, elevation, azimuth, length));
+        self.nodes[parent_index as usize].first_child = new_node_index;
+        self.nodes[new_node_index as usize].next_sibling = existing_first_child;
     }
-
+    
 }
 
 pub struct TreeConfig {

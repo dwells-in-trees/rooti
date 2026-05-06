@@ -86,6 +86,12 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         app.set_segments(segments);
     });
 
+    // Handle window close event
+    settings.window().on_close_requested(|| {
+        slint::quit_event_loop().unwrap();
+        CloseRequestResponse::HideWindow
+    });
+    
     // Run the app
     let _s = settings.show();
     app.run()?;
