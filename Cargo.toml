@@ -1,9 +1,9 @@
 [package]
 name = "desktop-tree"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 description = "A biologically inspired tree simulation with a GUI built using Slint."
-license = "MIT"
+license = "GPL-3"
 build = "build.rs"
 
 [dependencies]
