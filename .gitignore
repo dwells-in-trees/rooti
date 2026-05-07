@@ -2,9 +2,9 @@
 /target
 /release-builds
 
-# IDE files
-desktop-tree.code-workspace
+# IDE filess
 /.idea
+*.code-workspace
 
 # Backups
 *.bak
