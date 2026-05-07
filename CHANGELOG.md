@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.2.2] - 2026-05-07
+
+### Added
+
+- Add help section to menu bar with slint attributional widget *(ui)*
+- Add GPL-3 LICENSE and edit cargo.toml to reflect
+
+### Changed
+
+- Scaffold files for modularization of main.rs
+- Split main.rs into three modules
+- Implement LCRS tree model to reduce unnecessary vec allocations in parent-child relationships *(tree)*
+
 ## [v0.2.1] - 2026-04-09
 
 ### Changed
@@ -14,6 +27,7 @@
 ### Misc
 
 - Add git cliff for changelog generation
+- Release v0.2.1
 
 ## [v0.2.0] - 2026-04-08
 
