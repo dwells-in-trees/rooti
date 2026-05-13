@@ -1,5 +1,6 @@
 use crate::tree::{biology, TreeConfig, NULL_IDX};
 use super::node::{Tree, NodeType };
+use crate::tree::rng::{grows, noise_f32, PURPOSE_CONTINUATION_NOISE, PURPOSE_BRANCH_NOISE, PURPOSE_LEAF_NOISE};
 
 pub enum TreeEvent {
     Grow(usize),
@@ -11,20 +12,32 @@ pub enum TreeEvent {
 pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
     let mut events = Vec::new();
 
+    // increment tree tick-count
+    tree.ticks += 1;
+
+    // before computing growth events, compute auxin and pipe size across tree
     biology::update_auxin(tree, config);
     biology::update_pipes(tree);
+
+    // grab seed and ticks before entering loop
+    let seed = tree.seed;
+    let ticks = tree.ticks;
 
     // iterate through all nodes and generate growth events
     for (index, node) in tree.nodes.iter().enumerate() {
         events.push(TreeEvent::Grow(index));
         if node.node_type.is_active_wood() && node.length >= config.branch_threshold && node.first_child == NULL_IDX {
 
+            // Determine appropriate direction for new branch
             let offset = if node.node_type.left_node() { -config.branch_elevation } else { config.branch_elevation };
-
-            // Capture the randomized elevation for the continuation segment first
-            let continuation_elevation = node.elevation + rand::random_range(-config.branch_random_variation..=config.branch_random_variation);
-            let branch_elevation = node.elevation + offset + rand::random_range(-config.branch_random_variation..=config.branch_random_variation);
-            let leaf_elevation = 2.0 * node.elevation -branch_elevation + rand::random_range(-config.branch_random_variation..=config.branch_random_variation); // opposite side of the branch
+            
+            // Compute elevation angles for continuation segments, branches, and leaves based on seed and tick count
+            let continuation_elevation = node.elevation
+                + noise_f32(seed, ticks, index as u32, PURPOSE_CONTINUATION_NOISE, config.branch_random_variation);
+            let branch_elevation = node.elevation + offset
+                + noise_f32(seed, ticks, index as u32, PURPOSE_BRANCH_NOISE, config.branch_random_variation);
+            let leaf_elevation = 2.0 * node.elevation - branch_elevation
+                + noise_f32(seed, ticks, index as u32, PURPOSE_LEAF_NOISE, config.branch_random_variation); // opposite side of the branch
 
             events.push(TreeEvent::Branch {
                 parent: index,
@@ -65,19 +78,24 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
 }
 
 fn apply_events(tree: &mut Tree, events: &[TreeEvent], config: &TreeConfig) {
+
+
+    let seed = tree.seed;
+    let ticks = tree.ticks;
+
     for event in events {
         match event {
             TreeEvent::Grow(index) => {
                 tree.nodes[*index].age += 1;
-                if tree.nodes[*index].node_type.is_active_wood() && tree.nodes[*index].first_child == NULL_IDX {
-                    if rand::random_range(0.0..1.0) < config.node_activity_probability {
+                if tree.nodes[*index].node_type.is_active_wood() &&    tree.nodes[*index].first_child == NULL_IDX {
+                    if grows(seed, ticks, *index as u32, config.node_activity_probability) {
                         tree.nodes[*index].length += config.growth_rate_length;
 
                         // Gravitropic correction
                         let deviation = tree.nodes[*index].elevation - 90.0;
                         if deviation.abs() > config.gravitropism_threshold {
                             let excess = deviation.abs() - config.gravitropism_threshold;
-                            let max_excess = 90.0 - config.gravitropism_threshold; // how far past threshold is possible
+                            let max_excess = 90.0 - config.gravitropism_threshold; // The maximum possible excess beyond the threshold
                             let strength = excess / max_excess; // 0.0 at threshold, 1.0 at horizontal
                             let correction = config.gravitropism_rate * strength;
                             if deviation > 0.0 {
