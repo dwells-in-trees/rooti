@@ -30,7 +30,7 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
 
             // Determine appropriate direction for new branch
             let offset = if node.node_type.left_node() { -config.branch_elevation } else { config.branch_elevation };
-            
+
             // Compute elevation angles for continuation segments, branches, and leaves based on seed and tick count
             let continuation_elevation = node.elevation
                 + noise_f32(seed, ticks, index as u32, PURPOSE_CONTINUATION_NOISE, config.branch_random_variation);
@@ -54,7 +54,7 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
             // Leaf sprouts from the elbow — opposite direction of the auxiliary branch
             events.push(TreeEvent::Branch {
                 parent: index,
-                node_type: NodeType::Leaf { size: 12.0 },
+                node_type: NodeType::Leaf { _size: 12.0 },
                 elevation: leaf_elevation,  // opposite side from auxiliary branch, relative to parent
                 azimuth: node.azimuth,
             });

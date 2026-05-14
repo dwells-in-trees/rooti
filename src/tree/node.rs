@@ -1,7 +1,5 @@
 use crate::tree::NULL_IDX;
 
-use rand::{Rng, RngExt};
-
 pub struct Tree {
     pub(crate) nodes: Vec<TreeNode>,
     pub(crate) ticks: u64,
@@ -28,7 +26,7 @@ pub enum NodeType {
         left_node: bool,
     },
     Leaf {
-        size: f32,
+        _size: f32,
     },
 }
 
@@ -68,7 +66,7 @@ pub(crate) enum LeafPlacement {
 
 #[derive(Clone, Copy)]
 pub(crate) enum LeafShape {
-    Ginko,
+    Ginkgo,
 }
 
 impl TreeNode {
@@ -78,12 +76,12 @@ impl TreeNode {
 }
 
 impl Tree {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(seed: u64) -> Self {
         Self {
             nodes: vec![TreeNode::new(NULL_IDX, NodeType::Wood { is_active: true, left_node: false }, 90.0, 200.0, 1.0)],
             ticks: 0,
             // Initialize random seed
-            seed: rand::rng().random::<u64>(),
+            seed,
         }
     }
 
