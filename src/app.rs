@@ -2,6 +2,8 @@ use slint::*;
 use i_slint_backend_winit::{WinitWindowAccessor, winit::platform::windows::WindowExtWindows};
 use display_info::DisplayInfo;
 use std::{ error::Error, rc::Rc, cell::RefCell };
+use rand::RngExt;
+
 use crate::{ render, tree };
 
 include_modules!();
@@ -41,15 +43,47 @@ pub fn run() -> Result<(), Box<dyn Error>> {
         });
     })?;
 
-    // Create a tree data structure
-    let tree = Rc::new(RefCell::new(tree::Tree::new()));
+    // Generate initial random u64 seed value and create a new tree instance with it
+    let initial_seed: u64 = rand::rng().random();
+    let tree = Rc::new(RefCell::new(tree::Tree::new(initial_seed)));
+    settings.set_current_seed(SharedString::from(initial_seed.to_string()));
+
+    // Clone references for slint timer and tree reset callback
     let tree_for_timer = tree.clone();
     let tree_for_reset = tree.clone();
 
     // callback for resetting tree
+    let weak_settings_for_reset = settings.as_weak();
     settings.on_reset_tree(move || {
-        *tree_for_reset.borrow_mut() = tree::Tree::new();
+        let settings = weak_settings_for_reset.unwrap();
+        let input = settings.get_pending_seed();
+        let trimmed = input.trim();
+
+        let (new_seed, error_message) = if trimmed.is_empty() {
+            let seed: u64 = rand::rng().random();
+            (seed, String::new())
+        } else {
+            match trimmed.parse::<u64>() {
+                Ok(seed) => (seed, String::new()),
+                Err(_) => {
+                    // Parse failed — keep the existing tree, surface a clear error
+                    let msg = std::format!(
+                        "Invalid seed '{}'. Enter a whole number from 0 to {}, or leave empty for random.",
+                        trimmed,
+                        u64::MAX,
+                    );
+                    settings.set_seed_error(SharedString::from(msg));
+                    return;
+                }
+            }
+        };
+
+        *tree_for_reset.borrow_mut() = tree::Tree::new(new_seed);
+        settings.set_current_seed(SharedString::from(new_seed.to_string()));
+        settings.set_seed_error(SharedString::from(error_message));
+        settings.set_pending_seed(SharedString::from(""));
     });
+
 
     // start the slint timer
     timer.start(TimerMode::Repeated, std::time::Duration::from_millis(CLOCK_INTERVAL_MS), move || {
@@ -69,8 +103,9 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             min_activation_age: settings.get_min_activation_age() as u32,
             gravitropism_threshold: settings.get_gravitropism_threshold(),
             gravitropism_rate: settings.get_gravitropism_rate(),
-            leaf_shape: tree::node::LeafShape::Ginko,
-            leaf_placement: tree::node::LeafPlacement::AtBranchPoints,
+            leaf_shape: tree::node::LeafShape::Ginkgo,
+            _leaf_placement: tree::node::LeafPlacement::AtBranchPoints,
+            branch_threshold_variation: settings.get_branch_threshold_variation(),
         };
 
         if !settings.get_paused() {
@@ -88,7 +123,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Handle window close event
     settings.window().on_close_requested(|| {
-        slint::quit_event_loop().unwrap();
+        quit_event_loop().unwrap();
         CloseRequestResponse::HideWindow
     });
     

@@ -1,4 +1,4 @@
-import { Button, Slider, AboutSlint } from "std-widgets.slint";
+import { Button, Slider, AboutSlint, LineEdit } from "std-widgets.slint";
 
 export struct SegmentData {
     x1: float, y1: float,
@@ -26,7 +26,6 @@ export struct LeafData {
 
 export component SettingsWindow inherits Window {
     title: "Tree Settings";
-    height: 620px;
     width: 320px;
     default-font-family: "Consolas";
 
@@ -34,6 +33,7 @@ export component SettingsWindow inherits Window {
 
     in-out property <float> node-activity-probability: 0.30;
     in-out property <float> branch-threshold: 50.0;
+    in-out property <float> branch-threshold-variation: 2.0;
     in-out property <float> branch-elevation: 40.0;
     in-out property <float> branch-thickness-factor: 1.0;
     in-out property <float> branch-random-variation: 15.0;
@@ -46,6 +46,11 @@ export component SettingsWindow inherits Window {
     in-out property <float> gravitropism-rate: 0.1;
     in-out property <bool> paused: false;
 
+    // Properties for seed
+    in-out property <string> current-seed: "0"; // Read-only
+    in-out property <string> pending-seed: ""; // Editable; applied on reset
+    in-out property <string> seed-error: "";
+
     VerticalLayout {
         padding: 10px;
         spacing: 4px;
@@ -55,6 +60,9 @@ export component SettingsWindow inherits Window {
 
         Text { text: "Branch Threshold: " + Math.round(root.branch-threshold); }
         Slider { minimum: 10; maximum: 200; value <=> root.branch-threshold; }
+
+        Text { text: "Branch Threshold Variation: " + Math.round(root.branch-threshold-variation); }
+        Slider { minimum: 0; maximum: 10; value <=> root.branch-threshold-variation; }
 
         Text { text: "Branch Elevation: " + Math.round(root.branch-elevation) + "°"; }
         Slider { minimum: 5; maximum: 80; value <=> root.branch-elevation; }
@@ -85,6 +93,22 @@ export component SettingsWindow inherits Window {
 
         Text { text: "Gravitropism Rate: " + Math.round(root.gravitropism-rate * 100) / 100; }
         Slider { minimum: 0; maximum: 1; value <=> root.gravitropism-rate; }
+
+        Text {
+            text: "Current Seed: " + root.current-seed;
+            color: #888;
+        }
+
+        LineEdit {
+            placeholder-text: "Leave empty for random";
+            text <=> pending-seed;
+        }
+
+        // Error text for invalid seed
+        if seed-error != "": Text {
+            text: seed-error;
+            color: red;
+        }
 
         Button {
             text: root.paused ? "▶ Play" : "⏸ Pause";
