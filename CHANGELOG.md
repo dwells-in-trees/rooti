@@ -1,5 +1,11 @@
 # Changelog
 
+## [v0.3.0] - 2026-05-14
+
+### Added
+
+- Add deterministic random growth with seed values
+
 ## [v0.2.2] - 2026-05-07
 
 ### Added
@@ -12,6 +18,12 @@
 - Scaffold files for modularization of main.rs
 - Split main.rs into three modules
 - Implement LCRS tree model to reduce unnecessary vec allocations in parent-child relationships *(tree)*
+
+### Misc
+
+- Update gitignore release-builds directory
+- Update gitignore
+- Remove code-workspace files and adjust git ignore
 
 ## [v0.2.1] - 2026-04-09
 
