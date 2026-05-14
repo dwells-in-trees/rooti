@@ -8,12 +8,13 @@ pub(crate) fn hash_u64(seed: u64, tick: u64, node_id: u32, purpose: u32) -> u64 
 }
 
 pub(crate) const PURPOSE_GROWTH: u32 = 0;
-pub(crate) const PURPOSE_ELEVATION_NOISE: u32 = 1;
-pub(crate) const PURPOSE_AZIMUTH_NOISE: u32 = 2;
+pub(crate) const _PURPOSE_ELEVATION_NOISE: u32 = 1;
+pub(crate) const _PURPOSE_AZIMUTH_NOISE: u32 = 2;
 pub(crate) const PURPOSE_FIRST_BRANCH: u32 = 3;
 pub(crate) const PURPOSE_CONTINUATION_NOISE: u32 = 4;
 pub(crate) const PURPOSE_BRANCH_NOISE: u32 = 5;
 pub(crate) const PURPOSE_LEAF_NOISE: u32 = 6;
+pub(crate) const PURPOSE_BRANCH_THRESHOLD: u32 = 7;
 
 pub(crate) fn grows(seed: u64, tick: u64, node_id: u32, probability: f32) -> bool {
     let h = hash_u64(seed, tick, node_id, PURPOSE_GROWTH);
@@ -41,7 +42,7 @@ mod tests {
     #[test]
     fn hash_distinguishes_purposes() {
         let a = hash_u64(42, 100, 7, PURPOSE_GROWTH);
-        let b = hash_u64(42, 100, 7, PURPOSE_ELEVATION_NOISE);
+        let b = hash_u64(42, 100, 7, PURPOSE_FIRST_BRANCH);
         assert_ne!(a, b);
     }
 

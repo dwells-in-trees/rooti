@@ -1,6 +1,6 @@
 use crate::tree::{biology, TreeConfig, NULL_IDX};
 use super::node::{Tree, NodeType };
-use crate::tree::rng::{grows, noise_f32, PURPOSE_CONTINUATION_NOISE, PURPOSE_BRANCH_NOISE, PURPOSE_LEAF_NOISE};
+use crate::tree::rng::{grows, noise_f32, PURPOSE_CONTINUATION_NOISE, PURPOSE_BRANCH_NOISE, PURPOSE_LEAF_NOISE, PURPOSE_BRANCH_THRESHOLD};
 
 pub enum TreeEvent {
     Grow(usize),
@@ -26,7 +26,11 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
     // iterate through all nodes and generate growth events
     for (index, node) in tree.nodes.iter().enumerate() {
         events.push(TreeEvent::Grow(index));
-        if node.node_type.is_active_wood() && node.length >= config.branch_threshold && node.first_child == NULL_IDX {
+
+        let threshold_offset = noise_f32(seed, 0, index as u32, PURPOSE_BRANCH_THRESHOLD, config.branch_threshold_variation);
+        let effective_threshold = config.branch_threshold + threshold_offset;
+
+        if node.node_type.is_active_wood() && node.length >= effective_threshold && node.first_child == NULL_IDX {
 
             // Determine appropriate direction for new branch
             let offset = if node.node_type.left_node() { -config.branch_elevation } else { config.branch_elevation };

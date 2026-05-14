@@ -104,7 +104,8 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             gravitropism_threshold: settings.get_gravitropism_threshold(),
             gravitropism_rate: settings.get_gravitropism_rate(),
             leaf_shape: tree::node::LeafShape::Ginkgo,
-            leaf_placement: tree::node::LeafPlacement::AtBranchPoints,
+            _leaf_placement: tree::node::LeafPlacement::AtBranchPoints,
+            branch_threshold_variation: settings.get_branch_threshold_variation(),
         };
 
         if !settings.get_paused() {

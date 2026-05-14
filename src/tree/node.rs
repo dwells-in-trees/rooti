@@ -1,4 +1,5 @@
 use crate::tree::NULL_IDX;
+use crate::tree::rng::{hash_u64, PURPOSE_FIRST_BRANCH};
 
 pub struct Tree {
     pub(crate) nodes: Vec<TreeNode>,
@@ -77,8 +78,12 @@ impl TreeNode {
 
 impl Tree {
     pub(crate) fn new(seed: u64) -> Self {
+        let first_branch_left = hash_u64(seed, 0, 0, PURPOSE_FIRST_BRANCH) & 1 == 0;
         Self {
-            nodes: vec![TreeNode::new(NULL_IDX, NodeType::Wood { is_active: true, left_node: false }, 90.0, 200.0, 1.0)],
+            nodes: vec![TreeNode::new(
+                NULL_IDX,
+                NodeType::Wood { is_active: true, left_node: first_branch_left },
+                90.0, 200.0, 1.0)],
             ticks: 0,
             // Initialize random seed
             seed,
@@ -111,5 +116,6 @@ pub struct TreeConfig {
     pub(crate) gravitropism_threshold: f32, // degrees from 90° before correction kicks in
     pub(crate) gravitropism_rate: f32,
     pub(crate) leaf_shape: LeafShape,
-    pub(crate) leaf_placement: LeafPlacement,
+    pub(crate) _leaf_placement: LeafPlacement, // TODO: implement leaf placement
+    pub(crate) branch_threshold_variation: f32,
 }
