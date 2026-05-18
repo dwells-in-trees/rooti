@@ -1,6 +1,6 @@
 use crate::render::{ leaves, RenderConfig };
-use crate::tree::node::Tree;
-use crate::tree::{TreeConfig, NULL_IDX};
+use crate::tree::node::{ Tree, NodeType };
+use crate::tree::{ TreeConfig, NULL_IDX };
 
 pub(crate) struct Segment {
     pub(crate) x1: f32, pub(crate) y1: f32,
@@ -81,8 +81,17 @@ pub(crate) fn nodes_to_renderables(tree: &Tree, node_index: usize, tree_config: 
         let parent = &tree.nodes[node.parent as usize];
         let visual_half = parent.thickness * render_config.branch_thickness_factor / 2.0;
         let parent_rad = parent.elevation.to_radians();
-        let start_x = pos.0 + visual_half * parent_rad.cos();
-        let start_y = pos.1 - visual_half * parent_rad.sin();
+
+        let (start_x, start_y) = if let NodeType::Wood { left_node: true, .. } = parent.node_type {
+            // Bottom-left corner
+            (pos.0 - visual_half * parent_rad.sin(),
+             pos.1 - visual_half * parent_rad.cos())
+        } else {
+            // Bottom-right corner
+            (pos.0 + visual_half * parent_rad.sin(),
+             pos.1 + visual_half * parent_rad.cos())
+        };
+
         leaves.push(leaves::leaf_to_points(start_x, start_y, node.elevation, &tree_config.leaf_shape, 12.0));
     }
     
