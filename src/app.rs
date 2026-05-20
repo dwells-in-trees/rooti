@@ -5,6 +5,7 @@ use std::{ error::Error, rc::Rc, cell::RefCell };
 use rand::RngExt;
 
 use crate::{ render, tree };
+use crate::tree::species::Species::Ginkgo;
 
 include_modules!();
 
@@ -45,7 +46,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
 
     // Generate initial random u64 seed value and create a new tree instance with it
     let initial_seed: u64 = rand::rng().random();
-    let tree = Rc::new(RefCell::new(tree::Tree::new(initial_seed)));
+    let tree = Rc::new(RefCell::new(tree::Tree::new(initial_seed, Ginkgo)));
     settings.set_current_seed(SharedString::from(initial_seed.to_string()));
 
     // Clone references for slint timer and tree reset callback
@@ -78,7 +79,7 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             }
         };
 
-        *tree_for_reset.borrow_mut() = tree::Tree::new(new_seed);
+        *tree_for_reset.borrow_mut() = tree::Tree::new(new_seed, Ginkgo);
         settings.set_current_seed(SharedString::from(new_seed.to_string()));
         settings.set_seed_error(SharedString::from(error_message));
         settings.set_pending_seed(SharedString::from(""));
@@ -103,8 +104,6 @@ pub fn run() -> Result<(), Box<dyn Error>> {
             min_activation_age: settings.get_min_activation_age() as u32,
             gravitropism_threshold: settings.get_gravitropism_threshold(),
             gravitropism_rate: settings.get_gravitropism_rate(),
-            leaf_shape: tree::node::LeafShape::Ginkgo,
-            _leaf_placement: tree::node::LeafPlacement::AtBranchPoints,
             branch_threshold_variation: settings.get_branch_threshold_variation(),
         };
 

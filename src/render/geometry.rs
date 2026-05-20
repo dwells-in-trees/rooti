@@ -91,8 +91,8 @@ pub(crate) fn nodes_to_renderables(tree: &Tree, node_index: usize, tree_config: 
             (pos.0 + visual_half * parent_rad.sin(),
              pos.1 + visual_half * parent_rad.cos())
         };
-
-        leaves.push(leaves::leaf_to_points(start_x, start_y, node.elevation, &tree_config.leaf_shape, 12.0));
+        
+        leaves.push(leaves::leaf_to_points(start_x, start_y, node.elevation, &tree.species_data.leaf_shape, node.node_type.get_leaf_size()));
     }
     
     let mut cursor = first_child;

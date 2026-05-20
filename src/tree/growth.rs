@@ -55,10 +55,10 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
                 azimuth: node.azimuth,
                 node_type: NodeType::Wood { is_active: false, left_node: node.node_type.left_node() },
             });
-            // Leaf sprouts from the elbow — opposite direction of the auxiliary branch
+            // ------------- LEAF NODES -------------- 
             events.push(TreeEvent::Branch {
                 parent: index,
-                node_type: NodeType::Leaf { _size: 12.0 },
+                node_type: NodeType::Leaf { size: tree.species_data.leaf_size_min },
                 elevation: leaf_elevation,  // opposite side from auxiliary branch, relative to parent
                 azimuth: node.azimuth,
             });
@@ -72,6 +72,8 @@ pub(crate) fn tick(tree: &mut Tree, config: &TreeConfig) -> Vec<TreeEvent> {
             }
         } else if node.node_type.is_active_wood() && node.auxin_received > config.auxin_threshold {
             events.push(TreeEvent::Deactivate(index));
+        } else if node.node_type.is_leaf() {
+            // todo Implement leaf pruning if fully grown and above a certain age
         }
     }
     #[cfg(feature = "diagnostics")]
@@ -109,6 +111,9 @@ fn apply_events(tree: &mut Tree, events: &[TreeEvent], config: &TreeConfig) {
                             }
                         }
                     }
+                } else if tree.nodes[*index].node_type.is_leaf() && tree.nodes[*index].node_type.get_leaf_size() <= tree.species_data.leaf_size_max {
+                    let new_leaf_size: f32 = tree.nodes[*index].node_type.get_leaf_size() + 0.01;
+                    tree.nodes[*index].node_type.set_leaf_size(new_leaf_size);
                 }
             }
             TreeEvent::Branch { parent, node_type, elevation, azimuth } => {

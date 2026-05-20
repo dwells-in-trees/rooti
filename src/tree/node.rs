@@ -1,7 +1,10 @@
 use crate::tree::NULL_IDX;
 use crate::tree::rng::{hash_u64, PURPOSE_FIRST_BRANCH};
+use crate::tree::species::{Species, SpeciesData};
 
 pub struct Tree {
+    pub(crate) species: Species,
+    pub(crate) species_data: SpeciesData,
     pub(crate) nodes: Vec<TreeNode>,
     pub(crate) ticks: u64,
     pub(crate) seed: u64,
@@ -27,7 +30,7 @@ pub enum NodeType {
         left_node: bool,
     },
     Leaf {
-        _size: f32,
+        size: f32,
     },
 }
 
@@ -53,21 +56,24 @@ impl NodeType {
     pub(crate) fn is_leaf(&self) -> bool {
         matches!(self, NodeType::Leaf { .. })
     }
+    
+    pub(crate) fn get_leaf_size(&self) -> f32 {
+        if let NodeType::Leaf { size } = self {
+            *size
+        } else {
+            0.0
+        }
+    }
+    
+    pub(crate) fn set_leaf_size(&mut self, new_size: f32) {
+        if let NodeType::Leaf { size, .. } = self {
+            *size = new_size;
+        }
+    }
 
     pub(crate) fn is_wood(&self) -> bool {
         matches!(self, NodeType::Wood { .. })
     }
-}
-
-pub(crate) enum LeafPlacement {
-    AtBranchPoints,
-    //AtBranchTips,
-    //AlongSegments,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum LeafShape {
-    Ginkgo,
 }
 
 impl TreeNode {
@@ -77,9 +83,12 @@ impl TreeNode {
 }
 
 impl Tree {
-    pub(crate) fn new(seed: u64) -> Self {
+    pub(crate) fn new(seed: u64, species: Species) -> Self {
         let first_branch_left = hash_u64(seed, 0, 0, PURPOSE_FIRST_BRANCH) & 1 == 0;
+        let species_data = species.data();
         Self {
+            species,
+            species_data,
             nodes: vec![TreeNode::new(
                 NULL_IDX,
                 NodeType::Wood { is_active: true, left_node: first_branch_left },
@@ -115,7 +124,5 @@ pub struct TreeConfig {
     pub(crate) min_activation_age: u32,
     pub(crate) gravitropism_threshold: f32, // degrees from 90° before correction kicks in
     pub(crate) gravitropism_rate: f32,
-    pub(crate) leaf_shape: LeafShape,
-    pub(crate) _leaf_placement: LeafPlacement, // TODO: implement leaf placement
     pub(crate) branch_threshold_variation: f32,
 }

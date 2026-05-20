@@ -2,6 +2,7 @@ pub mod node;
 pub mod growth;
 pub mod biology;
 mod rng;
+pub mod species;
 
 // Re-exports
 pub use node::{ Tree, TreeConfig };
